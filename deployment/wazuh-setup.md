@@ -1,0 +1,1 @@
+- Mise en place d'un serveur Ubuntu pour accueillir l'EDR/SIEM Wazuh
