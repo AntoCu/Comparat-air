@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function LoginPage({ setIsLoggedIn, setUserEmail }) {
   const [email, setEmail] = useState('');
@@ -47,6 +47,9 @@ export default function LoginPage({ setIsLoggedIn, setUserEmail }) {
         />
         <button type="submit">Se connecter</button>
       </form>
+      <p style={{ marginTop: '20px' }}>
+        Pas encore de compte ? <Link to="/register">S'inscrire</Link>
+      </p>
     </div>
   );
 }
