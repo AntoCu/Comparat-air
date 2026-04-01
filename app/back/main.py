@@ -1,6 +1,9 @@
 import hashlib
+import json
+import logging
 import secrets
-from fastapi import FastAPI, HTTPException
+from pathlib import Path
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,6 +30,8 @@ HASH_NAME = "sha256"
 HASH_ITERATIONS = 120_000
 SALT_LENGTH = 16
 MIN_PASSWORD_LENGTH = 8
+LOG_FILE_PATH = Path("/var/log/skystream/access.log")
+
 COMMON_WEAK_PASSWORDS = {
     "123456",
     "12345678",
@@ -42,6 +47,34 @@ COMMON_WEAK_PASSWORDS = {
 }
 
 
+# Configure and return the access logger used to write login failure events.
+def setup_access_logger() -> logging.Logger:
+    logger = logging.getLogger("fastapi_access")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+
+    try:
+        LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")
+    except (OSError, PermissionError) as exc:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+        logger.error(f"Unable to open access log file {LOG_FILE_PATH}: {exc}")
+        return logger
+
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    return logger
+
+
+ACCESS_LOGGER = setup_access_logger()
+
+
+# Hash a user password with a salt so it can be stored securely.
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(SALT_LENGTH)
     derived = hashlib.pbkdf2_hmac(
@@ -53,6 +86,7 @@ def hash_password(password: str) -> str:
     return f"{salt}${derived.hex()}"
 
 
+# Verify a password by comparing its derived hash with the stored hash.
 def verify_password(password: str, stored_hash: str) -> bool:
     try:
         salt, stored_hex = stored_hash.split("$", 1)
@@ -68,6 +102,18 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return secrets.compare_digest(derived.hex(), stored_hex)
 
 
+# Log a failed login attempt as a JSON event for later analysis.
+def log_failed_login(user_email: str, ip_address: str, reason: str) -> None:
+    log_entry = {
+        "event": "login_failed",
+        "user": user_email,
+        "ip": ip_address,
+        "reason": reason,
+    }
+    ACCESS_LOGGER.info(json.dumps(log_entry, ensure_ascii=False))
+
+
+# Check whether a password meets strength rules before allowing registration.
 def is_password_strong(password: str) -> bool:
     normalized = password.strip().lower()
     if len(password) < MIN_PASSWORD_LENGTH:
@@ -90,6 +136,7 @@ def is_password_strong(password: str) -> bool:
 
 
 @app.post("/register")
+# Handle user signup, validate the password, and store the hashed password.
 def register(user: User):
     if user.email in users_db:
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
@@ -109,9 +156,17 @@ def register(user: User):
 
 
 @app.post("/login")
-def login(user: User):
+# Handle user login and log failed attempts with IP and reason.
+def login(user: User, request: Request):
     stored_hash = users_db.get(user.email)
-    if stored_hash is None or not verify_password(user.password, stored_hash):
+    ip_address = request.client.host if request.client else "unknown"
+
+    if stored_hash is None:
+        log_failed_login(user.email, ip_address, "unknown_user")
+        raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
+
+    if not verify_password(user.password, stored_hash):
+        log_failed_login(user.email, ip_address, "wrong_password")
         raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
 
     return {"message": "Connexion réussie !", "email": user.email}
