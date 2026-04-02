@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import LoginPage from './pages/login-page';
+import RegisterPage from './pages/register-page';
 import MenuPage from './pages/menu-page';
 
 export default function App() {
@@ -16,6 +17,11 @@ export default function App() {
         <Route 
           path="/login" 
           element={<LoginPage setIsLoggedIn={setIsLoggedIn} setUserEmail={setUserEmail} />} 
+        />
+
+        <Route 
+          path="/register"
+          element={<RegisterPage />}
         />
         
         <Route 
