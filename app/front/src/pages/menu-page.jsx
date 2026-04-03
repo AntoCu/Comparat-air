@@ -13,7 +13,17 @@ export default function MenuPage({ userEmail, setIsLoggedIn }) {
       <h1>Menu Principal</h1>
       <p>Bienvenue, tu es connecté avec : <strong>{userEmail}</strong></p>
       <br />
-      <button onClick={handleLogout} style={{ backgroundColor: '#dc3545', color: 'white', padding: '10px' }}>
+      <button 
+        onClick={() => navigate('/dashboard')} 
+        style={{ backgroundColor: '#17a2b8', color: 'white', padding: '10px', marginRight: '10px', border: 'none', cursor: 'pointer' }}
+      >
+        Consulter le Dashboard Sécurité
+      </button>
+
+      <button 
+        onClick={handleLogout} 
+        style={{ backgroundColor: '#dc3545', color: 'white', padding: '10px', border: 'none', cursor: 'pointer' }}
+      >
         Se déconnecter
       </button>
     </div>

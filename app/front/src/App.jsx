@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/login-page';
 import RegisterPage from './pages/register-page';
 import MenuPage from './pages/menu-page';
+import DashboardPage from './pages/dashboard-page'; 
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -28,6 +29,13 @@ export default function App() {
           path="/menu" 
           element={
             isLoggedIn ? <MenuPage userEmail={userEmail} setIsLoggedIn={setIsLoggedIn} /> : <Navigate to="/login" />
+          } 
+        />
+
+        <Route 
+          path="/dashboard" 
+          element={
+            isLoggedIn ? <DashboardPage /> : <Navigate to="/login" />
           } 
         />
       </Routes>

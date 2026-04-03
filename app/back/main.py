@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 app = FastAPI()
 
@@ -105,13 +106,13 @@ def verify_password(password: str, stored_hash: str) -> bool:
 # Log a failed login attempt as a JSON event for later analysis.
 def log_failed_login(user_email: str, ip_address: str, reason: str) -> None:
     log_entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
         "event": "login_failed",
         "user": user_email,
         "ip": ip_address,
         "reason": reason,
     }
     ACCESS_LOGGER.info(json.dumps(log_entry, ensure_ascii=False))
-
 
 # Check whether a password meets strength rules before allowing registration.
 def is_password_strong(password: str) -> bool:
@@ -171,3 +172,16 @@ def login(user: User, request: Request):
 
     return {"message": "Connexion réussie !", "email": user.email}
 
+
+@app.get("/admin/logs")
+def get_logs():
+    if not LOG_FILE_PATH.exists():
+        return []
+    
+    try:
+        with open(LOG_FILE_PATH, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            logs = [json.loads(line) for line in lines if line.strip()]
+            return logs[::-1][:50]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lecture logs: {str(e)}")

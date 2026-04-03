@@ -5,7 +5,7 @@
 ### Configuration de la VM
 - **OS :** Ubuntu 22.04 LTS
 - **Ressources :** 4 Go RAM / 2 CPUs
-- **Réseau :** IP `192.168.144.136`
+- **Réseau :** IP `192.168.144.203`
 
 ### Installation rapide
 Le serveur a été déployé avec le script automatique officiel :
@@ -13,7 +13,7 @@ Le serveur a été déployé avec le script automatique officiel :
 2. `sudo bash wazuh-install.sh -a`
 
 ### Accès Dashboard
-- **URL :** `https://192.168.144.136`
+- **URL :** `https://192.168.144.203`
 - **User :** `admin`
 - **Password :** `[STORED IN SECURE VAULT / SEE .ENV]`
 
