@@ -17,9 +17,14 @@ export default function LoginPage({ setIsLoggedIn, setUserEmail }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+      
       const data = await response.json();
 
       if (response.ok) {
+        // --- SAUVEGARDE DU TOKEN ET DU ROLE ---
+        localStorage.setItem('token', data.access_token);
+        localStorage.setItem('role', data.role);
+
         setUserEmail(data.email);
         setIsLoggedIn(true);
         navigate('/menu');
@@ -38,15 +43,22 @@ export default function LoginPage({ setIsLoggedIn, setUserEmail }) {
       
       <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', width: '300px', margin: '0 auto', gap: '10px' }}>
         <input 
-          type="email" placeholder="Email" value={email}
-          onChange={(e) => setEmail(e.target.value)} required 
+          type="email" 
+          placeholder="Email" 
+          value={email}
+          onChange={(e) => setEmail(e.target.value)} 
+          required 
         />
         <input 
-          type="password" placeholder="Mot de passe" value={password}
-          onChange={(e) => setPassword(e.target.value)} required 
+          type="password" 
+          placeholder="Mot de passe" 
+          value={password}
+          onChange={(e) => setPassword(e.target.value)} 
+          required 
         />
         <button type="submit">Se connecter</button>
       </form>
+      
       <p style={{ marginTop: '20px' }}>
         Pas encore de compte ? <Link to="/register">S'inscrire</Link>
       </p>
