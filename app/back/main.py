@@ -45,6 +45,9 @@ class User(BaseModel):
     email: str
     password: str
 
+class SearchRequest(BaseModel):
+    query: str
+
 # --- SYSTÈME DE LOGS POUR WAZUH ---
 def setup_access_logger() -> logging.Logger:
     logger = logging.getLogger("fastapi_access")
@@ -185,6 +188,12 @@ def get_logs(request: Request):
             return logs[::-1][:50]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lecture logs: {str(e)}")
+    
+@app.post("/search-destination")
+def search_destination(request: SearchRequest):
+    raw_query = request.query
+    cleaned_query = sanitize_input(raw_query)
+    return {"cleaned_query": cleaned_query}
 
 if __name__ == "__main__":
     import uvicorn
