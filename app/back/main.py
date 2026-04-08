@@ -3,6 +3,8 @@ import json
 import logging
 import secrets
 import jwt
+import os
+from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request
@@ -22,9 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- CHARGEMENT DES VARIABLES D'ENVIRONNEMENT ---
+load_dotenv()
+
 # --- CONFIGURATION SÉCURITÉ & CONSTANTES ---
-SECRET_KEY = "TON_SECRET_TRES_SECURISE_POUR_LE_PFE" # À mettre en .env en prod
-ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-key-pour-les-tests")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 HASH_NAME = "sha256"
