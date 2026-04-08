@@ -4,18 +4,29 @@ import logging
 import secrets
 import jwt
 import os
+import html
 from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-import html
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
-# --- INITIALISATION DE L'API ---
+# 1. Charger les variables d'environnement en premier
+load_dotenv()
+
+# 2. Initialiser l'API FastAPI
 app = FastAPI()
 
-# Configuration CORS pour autoriser ton Front-end React
+# 3. Initialiser le Limiteur APRES l'app
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# 4. Configuration CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -23,9 +34,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# --- CHARGEMENT DES VARIABLES D'ENVIRONNEMENT ---
-load_dotenv()
 
 # --- CONFIGURATION SÉCURITÉ & CONSTANTES ---
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-key-pour-les-tests")
@@ -42,8 +50,6 @@ COMMON_WEAK_PASSWORDS = {
     "123456", "12345678", "password", "admin", "azerty", "qwerty", "12345"
 }
 
-# Base de données en mémoire (sera remplacée par PostgreSQL plus tard)
-# Structure : { "email": {"password": "hash", "role": "admin|standard"} }
 users_db = {}
 
 class User(BaseModel):
@@ -130,9 +136,7 @@ def sanitize_input(text: str) -> str:
     clean_text = html.escape(text)
     if "script" in clean_text.lower():
         clean_text = clean_text.lower().replace("script", "[BLOCKED]")
-        
     return clean_text
-
 
 # --- ROUTES API ---
 
@@ -144,9 +148,7 @@ def register(user: User):
     if not is_password_strong(user.password):
         raise HTTPException(status_code=400, detail="Mot de passe trop faible")
     
-    # Premier utilisateur = Admin, les autres = Standard (pour tes tests)
     role = "admin" if len(users_db) == 0 else "standard"
-    
     users_db[user.email] = {
         "password": hash_password(user.password),
         "role": role
@@ -154,6 +156,7 @@ def register(user: User):
     return {"message": f"Utilisateur créé avec le rôle {role}"}
 
 @app.post("/login")
+@limiter.limit("5 per minute")
 def login(user: User, request: Request):
     user_entry = users_db.get(user.email)
     ip_address = request.client.host if request.client else "unknown"
@@ -166,9 +169,7 @@ def login(user: User, request: Request):
         log_failed_login(user.email, ip_address, "wrong_password")
         raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
 
-    # Création du jeton JWT incluant le rôle
     token = create_access_token(data={"sub": user.email, "role": user_entry["role"]})
-    
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -178,7 +179,6 @@ def login(user: User, request: Request):
 
 @app.get("/admin/logs")
 def get_logs(request: Request):
-    # Vérification stricte du rôle Admin via le JWT
     role = get_current_user_role(request)
     if role != "admin":
         raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
@@ -195,9 +195,10 @@ def get_logs(request: Request):
         raise HTTPException(status_code=500, detail=f"Erreur lecture logs: {str(e)}")
     
 @app.post("/search-destination")
-def search_destination(request: SearchRequest):
-    raw_query = request.query
-    cleaned_query = sanitize_input(raw_query)
+@limiter.limit("20 per minute")
+def search_destination(request: SearchRequest, request_obj: Request): 
+    # request_obj est utilisé par SlowAPI, request est ton modèle Pydantic
+    cleaned_query = sanitize_input(request.query)
     return {"cleaned_query": cleaned_query}
 
 if __name__ == "__main__":
