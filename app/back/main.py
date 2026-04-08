@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+import html
 
 # --- INITIALISATION DE L'API ---
 app = FastAPI()
@@ -115,11 +116,22 @@ def get_current_user_role(request: Request):
     except Exception:
         raise HTTPException(status_code=401, detail="Jeton invalide")
 
+# --- PROTECTION ANTI-XSS ---
+def sanitize_input(text: str) -> str:
+    text = text.strip()
+    clean_text = html.escape(text)
+    if "script" in clean_text.lower():
+        clean_text = clean_text.lower().replace("script", "[BLOCKED]")
+        
+    return clean_text
+
+
 # --- ROUTES API ---
 
 @app.post("/register")
 def register(user: User):
-    if user.email in users_db:
+    clean_email = sanitize_input(user.email)
+    if clean_email in users_db:
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
     if not is_password_strong(user.password):
         raise HTTPException(status_code=400, detail="Mot de passe trop faible")
