@@ -1,0 +1,38 @@
+name: Security Audit
+
+on:
+  pull_request:
+    branches: [ dev, main ]
+  schedule:
+    - cron: '15 22 * * *' # Every days at 10:14 PM
+
+jobs:
+  # Verification Front
+  npm-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run NPM Audit
+        run: |
+          cd app/front
+          npm audit --audit-level=high
+
+  # Verification Back
+  python-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Security Tools
+        run: pip install safety bandit
+      - name: Check Dependencies (Safety)
+        run: safety check -r app/back/requirements.txt
+      - name: Check Code Patterns (Bandit)
+        run: bandit -r app/back/ -ll 

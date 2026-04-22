@@ -1,15 +1,19 @@
-name: Linter Code
+name: Fronted Workflow
 
 on:
   pull_request:
     branches :
       - dev
       - main
+    paths:
+      - 'app/front/**'
       
 jobs:
-  lint:
+  linter:
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: ./app/front
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -23,22 +27,10 @@ jobs:
 
     - name: Install dependencies
       run: npm ci
-      working-directory: ./app/front
 
     - name: Run ESLint
       run: npx eslint .
-      working-directory: ./app/front
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-        cache-dependency-path: './app/back/requirements.txt'
-    
-    - name: Install & Run Ruff 
-      run: |
-        pip install ruff
-        ruff check .
-        ruff format --check
-      working-directory: ./app/back
+    - name: Build Check
+      run: npm run build
+
