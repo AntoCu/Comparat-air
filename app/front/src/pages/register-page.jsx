@@ -31,7 +31,7 @@ export default function RegisterPage() {
         setErrorMessage(data.detail || 'Erreur lors de l’inscription.');
       }
     } catch (error) {
-      setErrorMessage('Impossible de joindre le backend.');
+      setErrorMessage(error,'Impossible de joindre le backend.');
     }
   };
 

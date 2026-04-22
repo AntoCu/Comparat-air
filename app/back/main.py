@@ -1,7 +1,6 @@
 import hashlib
 import json
 import logging
-import requests
 import secrets
 import jwt
 import os
@@ -276,11 +275,11 @@ def register(user: UserRegister):
             (clean_email, clean_name, hashed_password, role)
         )
         conn.commit()
-        return {"message": f"Utilisateur créé avec succès"}
+        return {"message": "Utilisateur créé avec succès"}
         
     except psycopg2.Error as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail="Erreur base de données")
+        raise HTTPException(e,status_code=500, detail="Erreur base de données")
     finally:
         cursor.close()
         conn.close()

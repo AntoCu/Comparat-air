@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function ProfilePage({ setIsLoggedIn }) {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({
+  const [stats] = useState({
     volsSuivis: 12,
     distanceParcourue: 0, 
     heuresDeVol: 0
