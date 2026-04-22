@@ -1,9 +1,14 @@
 import hashlib
 import json
 import logging
+import requests
 import secrets
 import jwt
 import os
+import httpx
+import psycopg2
+import asyncio
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -37,19 +42,34 @@ HASH_ITERATIONS = 120_000
 SALT_LENGTH = 16
 MIN_PASSWORD_LENGTH = 8
 LOG_FILE_PATH = Path("/var/log/skystream/access.log")
-
+DATABASE_URL = "postgresql://neondb_owner:npg_z4BquTZrYU1M@ep-twilight-hall-al7uza0i-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 COMMON_WEAK_PASSWORDS = {
     "123456", "12345678", "password", "admin", "azerty", "qwerty", "12345"
 }
-
-# Base de données en mémoire (sera remplacée par PostgreSQL plus tard)
-# Structure : { "email": {"password": "hash", "role": "admin|standard"} }
-users_db = {}
-
-class User(BaseModel):
+RAPIDAPI_KEY="5a5b59f312mshf5c1dedcf776bedp173088jsn79c3d4a653da"
+# --- CONNEXION BASE DE DONNÉES ---
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    except Exception as e:
+        print(f"Erreur de connexion à la base de données : {e}")
+        raise HTTPException(status_code=500, detail="Erreur serveur (Base de données)")
+class FlightSearchRequest(BaseModel):
+    departure: str
+    date: str
+    max_price: float
+    passengers: int
+    is_direct: bool = False
+class UserRegister(BaseModel):
+    email: str
+    name: str
+    password: str
+    
+class UserLogin(BaseModel):
     email: str
     password: str
-
+    
 class SearchRequest(BaseModel):
     query: str
 
@@ -134,47 +154,165 @@ def sanitize_input(text: str) -> str:
     return clean_text
 
 
+DESTINATIONS = ["JFK", "LHR", "LAX"] 
+async def fetch_airport(client, dest, search, rapidapi_key):
+    url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
+    querystring = {
+        "departure_id": search.departure,
+        "arrival_id": dest,
+        "outbound_date": search.date,
+        "adults": search.passengers,
+        "currency": "EUR"
+    }
+    headers = {
+        "X-RapidAPI-Key": rapidapi_key,
+        "X-RapidAPI-Host": "google-flights2.p.rapidapi.com"
+    }
+
+    try:
+        response = await client.get(url, headers=headers, params=querystring, timeout=15.0)
+        
+        print(f"--- STATUS {response.status_code} POUR {dest} ---")
+        
+        if response.status_code == 200:
+            data = response.json()
+            itineraries = data.get("data", {}).get("itineraries", {})
+            top_flights = itineraries.get("topFlights", [])
+            other_flights = itineraries.get("otherFlights", [])
+            flights_list = top_flights + other_flights
+            
+            dest_flights = []
+            
+            for option in flights_list:
+                # Filtre vol direct
+                if search.is_direct and option.get("stops", 0) > 0:
+                    continue
+                
+                # Filtre prix
+                price = option.get("price", 9999)
+                if isinstance(price, dict): 
+                    price = price.get("raw", 9999)
+                
+                if price <= search.max_price:
+                    segments = option.get("flights", [])
+                    arrivee_nom = dest
+                    if segments:
+                        last_segment = segments[-1]
+                        arrivee_nom = last_segment.get("arrival_airport", {}).get("airport_name", dest)
+
+                    dest_flights.append({
+                        "id": option.get("booking_token", secrets.token_hex(6)),
+                        "dest": dest,
+                        "arrivee": arrivee_nom,
+                        "horaire_depart": option.get("departure_time", "N/A"),
+                        "horaire_arrivee": option.get("arrival_time", "N/A"),
+                        "prix": price,
+                        "passagers": search.passengers
+                    })
+            return dest_flights
+        else:
+            return [] # Si erreur (ex: 429), on renvoie une liste vide pour cet aéroport
+    except Exception as e:
+        print(f"Erreur pour {dest}: {e}")
+        return []
+    
+@app.post("/search-flights")
+async def search_flights(search: FlightSearchRequest):
+    rapidapi_key = "5a5b59f312mshf5c1dedcf776bedp173088jsn79c3d4a653da"
+    async with httpx.AsyncClient() as client:
+        tasks = []
+        
+        for dest in DESTINATIONS:
+            tasks.append(fetch_airport(client, dest, search, rapidapi_key))
+            
+            await asyncio.sleep(0.2) 
+        
+        results_matrix = await asyncio.gather(*tasks)
+    
+    all_flights = []
+    for airport_results in results_matrix:
+        all_flights.extend(airport_results)
+
+    # On trie et on limite à 20
+    all_flights = sorted(all_flights, key=lambda x: x["prix"])    
+    return {"results": all_flights}
+
 # --- ROUTES API ---
 
 @app.post("/register")
-def register(user: User):
+def register(user: UserRegister):
     clean_email = sanitize_input(user.email)
-    if clean_email in users_db:
-        raise HTTPException(status_code=400, detail="Email déjà utilisé")
+    clean_name = sanitize_input(user.name)
+    
     if not is_password_strong(user.password):
         raise HTTPException(status_code=400, detail="Mot de passe trop faible")
     
-    # Premier utilisateur = Admin, les autres = Standard (pour tes tests)
-    role = "admin" if len(users_db) == 0 else "standard"
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     
-    users_db[user.email] = {
-        "password": hash_password(user.password),
-        "role": role
-    }
-    return {"message": f"Utilisateur créé avec le rôle {role}"}
+    try:
+        # Vérifier si l'email ou le nom existe déjà
+        cursor.execute('SELECT id FROM "Users" WHERE email = %s OR name = %s', (clean_email, clean_name))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Email ou nom déjà utilisé")
+        
+        # Vérifier s'il y a déjà des utilisateurs pour assigner le rôle (le 1er est admin)
+        cursor.execute('SELECT COUNT(*) as count FROM "Users"')
+        count = cursor.fetchone()['count']
+        role = "admin" if count == 0 else "standard"
+        
+        hashed_password = hash_password(user.password)
+        
+        # Insertion dans Neon
+        cursor.execute(
+            'INSERT INTO "Users" (email, name, password, role) VALUES (%s, %s, %s, %s)',
+            (clean_email, clean_name, hashed_password, role)
+        )
+        conn.commit()
+        return {"message": f"Utilisateur créé avec succès"}
+        
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Erreur base de données")
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.post("/login")
-def login(user: User, request: Request):
-    user_entry = users_db.get(user.email)
+def login(user: UserLogin, request: Request):
     ip_address = request.client.host if request.client else "unknown"
-
-    if not user_entry:
-        log_failed_login(user.email, ip_address, "unknown_user")
-        raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
-
-    if not verify_password(user.password, user_entry["password"]):
-        log_failed_login(user.email, ip_address, "wrong_password")
-        raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
-
-    # Création du jeton JWT incluant le rôle
-    token = create_access_token(data={"sub": user.email, "role": user_entry["role"]})
+    clean_email = sanitize_input(user.email)
     
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "email": user.email,
-        "role": user_entry["role"]
-    }
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        # Récupérer l'utilisateur
+        cursor.execute('SELECT * FROM "Users" WHERE email = %s', (clean_email,))
+        user_entry = cursor.fetchone()
+        
+        if not user_entry:
+            log_failed_login(user.email, ip_address, "unknown_user")
+            raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
+
+        if not verify_password(user.password, user_entry["password"]):
+            log_failed_login(user.email, ip_address, "wrong_password")
+            raise HTTPException(status_code=400, detail="Email ou mot de passe incorrect")
+
+        # Le rôle est maintenant récupéré depuis la DB
+        token = create_access_token(data={"sub": user_entry["email"], "role": user_entry["role"]})
+        
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "email": user_entry["email"],
+            "role": user_entry["role"],
+            "name": user_entry["name"]
+        }
+    finally:
+        cursor.close()
+        conn.close()
+        
 
 @app.get("/admin/logs")
 def get_logs(request: Request):

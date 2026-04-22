@@ -25,7 +25,7 @@ export default function DashboardPage() {
         setErrorMessage("Erreur d'accès ou session expirée.");
       }
     } catch (error) {
-      setErrorMessage("Impossible de joindre l'API.");
+      setErrorMessage( error, "Impossible de joindre l'API.");
     }
   };
 

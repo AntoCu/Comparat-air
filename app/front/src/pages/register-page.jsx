@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export default function RegisterPage() {
       const response = await fetch('http://127.0.0.1:8000/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, name, password }),
       });
       const data = await response.json();
 
@@ -41,6 +42,13 @@ export default function RegisterPage() {
       {successMessage && <p style={{ color: 'green' }}>{successMessage}</p>}
 
       <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', width: '300px', margin: '0 auto', gap: '10px' }}>
+        <input
+          type="text"
+          placeholder="Nom d'utilisateur"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
         <input
           type="email"
           placeholder="Email"
