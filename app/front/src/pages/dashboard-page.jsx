@@ -25,11 +25,12 @@ export default function DashboardPage() {
         setErrorMessage("Erreur d'accès ou session expirée.");
       }
     } catch (error) {
-      setErrorMessage("Impossible de joindre l'API.");
+      setErrorMessage( error, "Impossible de joindre l'API.");
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLogs();
     const interval = setInterval(fetchLogs, 10000);
     return () => clearInterval(interval);
