@@ -1,0 +1,32 @@
+name: Backend Workflow
+
+on:
+  pull_request:
+    branches: 
+      - dev
+      - main
+    paths:
+      - 'app/back/**'
+
+jobs:
+  linter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app/back
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install & Run Ruff 
+        run: |
+          pip install ruff
+          ruff check .
+          ruff format --check
