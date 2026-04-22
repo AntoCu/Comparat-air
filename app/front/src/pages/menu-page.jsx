@@ -19,7 +19,6 @@ export default function MenuPage({ userEmail, setIsLoggedIn }) {
       
       <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
         
-        {/* CONDITION : Le bouton ne s'affiche que si le rôle est 'admin' */}
         {role === 'admin' && (
           <button 
             onClick={() => navigate('/dashboard')}

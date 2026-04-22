@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
-export default function LoginPage({ setIsLoggedIn, setUserEmail }) {
+export default function LoginPage({ setIsLoggedIn, setUserEmail, setUserName }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -17,22 +17,22 @@ export default function LoginPage({ setIsLoggedIn, setUserEmail }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      
+
       const data = await response.json();
 
       if (response.ok) {
-        // --- SAUVEGARDE DU TOKEN ET DU ROLE ---
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('role', data.role);
-
+        localStorage.setItem('name', data.name);
         setUserEmail(data.email);
+        setUserName(data.name);
         setIsLoggedIn(true);
-        navigate('/menu');
+        navigate('/');
       } else {
         setErrorMessage(data.detail || "Erreur de connexion.");
       }
     } catch (error) {
-      setErrorMessage("Impossible de joindre l'API");
+      setErrorMessage(error,"Impossible de joindre l'API");
     }
   };
 
@@ -40,25 +40,25 @@ export default function LoginPage({ setIsLoggedIn, setUserEmail }) {
     <div style={{ textAlign: 'center', padding: '50px' }}>
       <h2>Portail de Connexion</h2>
       {errorMessage && <p style={{ color: 'red' }}>{errorMessage}</p>}
-      
+
       <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', width: '300px', margin: '0 auto', gap: '10px' }}>
-        <input 
-          type="email" 
-          placeholder="Email" 
+        <input
+          type="email"
+          placeholder="Email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)} 
-          required 
+          onChange={(e) => setEmail(e.target.value)}
+          required
         />
-        <input 
-          type="password" 
-          placeholder="Mot de passe" 
+        <input
+          type="password"
+          placeholder="Mot de passe"
           value={password}
-          onChange={(e) => setPassword(e.target.value)} 
-          required 
+          onChange={(e) => setPassword(e.target.value)}
+          required
         />
         <button type="submit">Se connecter</button>
       </form>
-      
+
       <p style={{ marginTop: '20px' }}>
         Pas encore de compte ? <Link to="/register">S'inscrire</Link>
       </p>
