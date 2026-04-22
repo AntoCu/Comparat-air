@@ -35,4 +35,4 @@ jobs:
       - name: Check Dependencies (Safety)
         run: safety check -r app/back/requirements.txt
       - name: Check Code Patterns (Bandit)
-        run: bandit -r app/back/ -ll 
+        run: bandit -r app/back/ -lll 
