@@ -33,6 +33,6 @@ jobs:
       - name: Install Security Tools
         run: pip install safety bandit
       - name: Check Dependencies (Safety)
-        run: safety check -r app/back/requirements.txt
+        run: safety scan --file app/back/requirements.txt
       - name: Check Code Patterns (Bandit)
         run: bandit -r app/back/ -ll 
