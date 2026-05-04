@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ dev, main ]
   schedule:
-    - cron: '15 22 * * *' # Every days at 10:14 PM
+    - cron: '15 22 * * *' # Every days at 10:15 PM
 
 jobs:
   # Verification Front
@@ -20,6 +20,22 @@ jobs:
         run: |
           cd app/front
           npm audit --audit-level=high
+      - name: Send Mail on NPM Failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com 
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }} 
+          password: ${{ secrets.MAIL_PASSWORD }} 
+          subject: "Alerte Sécurité : Échec de l'audit Front sur GitHub Actions"
+          to: admin.pfe.fly@gmail.com 
+          from: GitHub Actions
+          body: |
+            L'analyse de sécurité sur le Front a détecté des vulnérabilités dans le code.
+            Dépôt : ${{ github.repository }}
+            Lien vers les logs : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
   # Verification Back
   python-security:
@@ -36,3 +52,19 @@ jobs:
         run: safety check -r app/back/requirements.txt
       - name: Check Code Patterns (Bandit)
         run: bandit -r app/back/ -lll 
+      - name: Send Mail on Bandit Failure
+        if: failure() 
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com 
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }} 
+          password: ${{ secrets.MAIL_PASSWORD }} 
+          subject: "Alerte Sécurité : Échec de l'audit Back sur GitHub Actions"
+          to: admin.pfe.fly@gmail.com 
+          from: GitHub Actions
+          body: |
+            L'analyse de sécurité sur le Back a détecté des vulnérabilités dans le code.
+            Dépôt : ${{ github.repository }}
+            Lien vers les logs : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
