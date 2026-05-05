@@ -290,7 +290,7 @@ async def fetch_airport(client, dest, search, rapidapi_key):
         else:
             return []
     except Exception as e:
-        print(f"❌ Erreur critique pour {dest}: {type(e).__name__} - {str(e)}")
+        print(f"Erreur critique pour {dest}: {type(e).__name__} - {str(e)}")
         return []
 
 
@@ -301,7 +301,7 @@ async def search_flights(search: FlightSearchRequest):
 
     async with httpx.AsyncClient() as client:
         for dest in DESTINATIONS:
-            print(f"✈️ Recherche vers {dest} en cours...")
+            print(f"Recherche vers {dest} en cours...")
 
             airport_results = await fetch_airport(client, dest, search, rapidapi_key)
             all_flights.extend(airport_results)
@@ -355,13 +355,13 @@ async def add_like(like: FlightLikeRequest):
         if cursor.rowcount == 0:
             return {"message": "Ce vol est déjà dans tes favoris !"}
 
-        print(f"✅ Vol {like.flight_id} liké avec succès par l'user {like.user_id} !")
+        print(f"Vol {like.flight_id} liké avec succès par l'user {like.user_id} !")
         return {"message": "Vol ajouté aux favoris avec succès"}
 
     except Exception as e:
         if conn:
             conn.rollback()
-        print(f"❌ Erreur SQL lors du Like : {e}")
+        print(f"Erreur SQL lors du Like : {e}")
         return {"error": "Impossible d'ajouter ce vol aux favoris"}
 
     finally:
@@ -438,7 +438,7 @@ def get_user_likes(user_id: int):
         return {"likes": likes}
 
     except Exception as e:
-        print(f"❌ Erreur SQL lors de la récupération des likes : {e}")
+        print(f"Erreur SQL lors de la récupération des likes : {e}")
         raise HTTPException(
             status_code=500, detail="Impossible de récupérer les favoris"
         )
@@ -586,7 +586,7 @@ async def refresh_user_likes(user_id: int):
 
     except Exception as e:
         conn.rollback()
-        print(f"❌ Erreur SQL lors du refresh : {e}")
+        print(f"Erreur SQL lors du refresh : {e}")
         raise HTTPException(status_code=500, detail="Erreur lors du rafraîchissement")
     finally:
         cursor.close()
