@@ -22,6 +22,7 @@ export default function LoginPage({ setIsLoggedIn, setUserEmail, setUserName }) 
 
       if (response.ok) {
         localStorage.setItem('token', data.access_token);
+        localStorage.setItem("user_id", data.id); 
         localStorage.setItem('role', data.role);
         localStorage.setItem('name', data.name);
         setUserEmail(data.email);
