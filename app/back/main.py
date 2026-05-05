@@ -19,18 +19,14 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-# 1. Charger les variables d'environnement en premier
 load_dotenv()
 
-# 2. Initialiser l'API FastAPI
 app = FastAPI()
 
-# 3. Initialiser le Limiteur APRES l'app
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# 4. Configuration CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -59,7 +55,7 @@ COMMON_WEAK_PASSWORDS = {
     "qwerty",
     "12345",
 }
-RAPIDAPI_KEY = "5a5b59f312mshf5c1dedcf776bedp173088jsn79c3d4a653da"
+RAPIDAPI_KEY = "d9bee26769mshb58290d712a14f7p1eeab9jsnf8a45fc32106"
 
 
 # --- CONNEXION BASE DE DONNÉES ---
@@ -70,8 +66,16 @@ def get_db_connection():
     except Exception as e:
         print(f"Erreur de connexion à la base de données : {e}")
         raise HTTPException(status_code=500, detail="Erreur serveur (Base de données)")
-
-
+    
+class FlightLikeRequest(BaseModel):
+    user_id: int
+    flight_id: str
+    depart: str      
+    arrivee: str     
+    jour: str        
+    prix: float
+    passagers: int
+    
 class FlightSearchRequest(BaseModel):
     departure: str
     date: str
@@ -205,8 +209,9 @@ async def fetch_airport(client, dest, search, rapidapi_key):
     }
 
     try:
+        # Timeout étendu à 30s pour laisser le temps à l'API
         response = await client.get(
-            url, headers=headers, params=querystring, timeout=15.0
+            url, headers=headers, params=querystring, timeout=30.0
         )
 
         print(f"--- STATUS {response.status_code} POUR {dest} ---")
@@ -231,57 +236,119 @@ async def fetch_airport(client, dest, search, rapidapi_key):
                     price = price.get("raw", 9999)
 
                 if price <= search.max_price:
-                    segments = option.get("flights", [])
+                    segments = option.get("flights") or []
                     arrivee_nom = dest
+                    depart_code = search.departure
+                    
                     if segments:
-                        last_segment = segments[-1]
-                        arrivee_nom = last_segment.get("arrival_airport", {}).get(
-                            "airport_name", dest
-                        )
+                        if isinstance(segments[-1], dict):
+                            arrivee_nom = segments[-1].get("arrival_airport", {}).get("airport_name", dest)
+                        if isinstance(segments[0], dict):
+                            depart_code = segments[0].get("departure_airport", {}).get("airport_code", search.departure)
+
+                    carbon = option.get("carbon_emissions")
+                    co2_kg = 0
+                    diff_percent = 0
+                    is_higher = False
+
+                    if isinstance(carbon, dict):
+                        co2_val = carbon.get("CO2e")
+                        if isinstance(co2_val, (int, float)):
+                            co2_kg = int(co2_val / 1000)
+                        
+                        diff_val = carbon.get("difference_percent")
+                        if isinstance(diff_val, (int, float)):
+                            diff_percent = int(diff_val)
+                            
+                        is_higher = "higher" in carbon
 
                     dest_flights.append(
                         {
                             "id": option.get("booking_token", secrets.token_hex(6)),
-                            "dest": dest,
+                            "depart": depart_code,
                             "arrivee": arrivee_nom,
                             "horaire_depart": option.get("departure_time", "N/A"),
                             "horaire_arrivee": option.get("arrival_time", "N/A"),
                             "prix": price,
                             "passagers": search.passengers,
+                            "emissions_co2": co2_kg,
+                            "emissions_diff": diff_percent,
+                            "emissions_higher": is_higher
                         }
                     )
             return dest_flights
         else:
-            return []  # Si erreur (ex: 429), on renvoie une liste vide pour cet aéroport
+            return []  
     except Exception as e:
-        print(f"Erreur pour {dest}: {e}")
+        print(f"❌ Erreur critique pour {dest}: {type(e).__name__} - {str(e)}")
         return []
-
 
 @app.post("/search-flights")
 async def search_flights(search: FlightSearchRequest):
-    rapidapi_key = "5a5b59f312mshf5c1dedcf776bedp173088jsn79c3d4a653da"
-    async with httpx.AsyncClient() as client:
-        tasks = []
-
-        for dest in DESTINATIONS:
-            tasks.append(fetch_airport(client, dest, search, rapidapi_key))
-
-            await asyncio.sleep(0.2)
-
-        results_matrix = await asyncio.gather(*tasks)
-
+    rapidapi_key = RAPIDAPI_KEY
     all_flights = []
-    for airport_results in results_matrix:
-        all_flights.extend(airport_results)
+    
+    async with httpx.AsyncClient() as client:
+        for dest in DESTINATIONS:
+            print(f"✈️ Recherche vers {dest} en cours...")
+            
+            airport_results = await fetch_airport(client, dest, search, rapidapi_key)
+            all_flights.extend(airport_results)
+            
+            await asyncio.sleep(1.5)
 
-    # On trie et on limite à 20
+    # On trie du moins cher au plus cher
     all_flights = sorted(all_flights, key=lambda x: x["prix"])
     return {"results": all_flights}
 
 
-# --- ROUTES API ---
 
+@app.post("/like")
+async def add_like(like: FlightLikeRequest):
+    conn = None
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO "Tracked_Flights" (flight_id, "from", dest, day, passengers_nbr)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT ("flight_id", "passengers_nbr") 
+            DO UPDATE SET flight_id = EXCLUDED.flight_id
+            RETURNING id;
+        """, (like.flight_id, like.depart, like.arrivee, like.jour, like.passagers))
+        
+        tracked_flight_id = cursor.fetchone()[0]
+
+        cursor.execute("""
+            INSERT INTO "Price_History" (tracked_flight_id, price)
+            VALUES (%s, %s);
+        """, (tracked_flight_id, like.prix))
+
+        cursor.execute("""
+            INSERT INTO "Likes" (user_id, tracked_flight_id)
+            VALUES (%s, %s)
+            ON CONFLICT ("user_id", "tracked_flight_id") DO NOTHING;
+        """, (like.user_id, tracked_flight_id))
+
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return {"message": "Ce vol est déjà dans tes favoris !"}
+            
+        print(f"✅ Vol {like.flight_id} liké avec succès par l'user {like.user_id} !")
+        return {"message": "Vol ajouté aux favoris avec succès"}
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"❌ Erreur SQL lors du Like : {e}")
+        return {"error": "Impossible d'ajouter ce vol aux favoris"}
+        
+    finally:
+        if conn:
+            cursor.close()
+            conn.close()
 
 @app.post("/register")
 def register(user: UserRegister):
@@ -295,7 +362,6 @@ def register(user: UserRegister):
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        # Vérifier si l'email ou le nom existe déjà
         cursor.execute(
             'SELECT id FROM "Users" WHERE email = %s OR name = %s',
             (clean_email, clean_name),
@@ -303,14 +369,12 @@ def register(user: UserRegister):
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="Email ou nom déjà utilisé")
 
-        # Vérifier s'il y a déjà des utilisateurs pour assigner le rôle (le 1er est admin)
         cursor.execute('SELECT COUNT(*) as count FROM "Users"')
         count = cursor.fetchone()["count"]
         role = "admin" if count == 0 else "standard"
 
         hashed_password = hash_password(user.password)
 
-        # Insertion dans Neon
         cursor.execute(
             'INSERT INTO "Users" (email, name, password, role) VALUES (%s, %s, %s, %s)',
             (clean_email, clean_name, hashed_password, role),
@@ -325,7 +389,37 @@ def register(user: UserRegister):
         cursor.close()
         conn.close()
 
-
+@app.get("/likes/{user_id}")
+def get_user_likes(user_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        cursor.execute("""
+            SELECT 
+                tf.id, 
+                tf.flight_id, 
+                tf."from" as depart, 
+                tf.dest as arrivee, 
+                tf.day as jour, 
+                tf.passengers_nbr as passagers,
+                (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = tf.id ORDER BY id DESC LIMIT 1) as prix
+            FROM "Likes" l
+            JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id
+            WHERE l.user_id = %s
+            ORDER BY l.id DESC;
+        """, (user_id,))
+        
+        likes = cursor.fetchall()
+        return {"likes": likes}
+        
+    except Exception as e:
+        print(f"❌ Erreur SQL lors de la récupération des likes : {e}")
+        raise HTTPException(status_code=500, detail="Impossible de récupérer les favoris")
+    finally:
+        cursor.close()
+        conn.close()
+        
 @app.post("/login")
 @limiter.limit("5 per minute")
 def login(user: UserLogin, request: Request):
@@ -336,7 +430,6 @@ def login(user: UserLogin, request: Request):
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     try:
-        # Récupérer l'utilisateur
         cursor.execute('SELECT * FROM "Users" WHERE email = %s', (clean_email,))
         user_entry = cursor.fetchone()
 
@@ -352,7 +445,6 @@ def login(user: UserLogin, request: Request):
                 status_code=400, detail="Email ou mot de passe incorrect"
             )
 
-        # Le rôle est maintenant récupéré depuis la DB
         token = create_access_token(
             data={"sub": user_entry["email"], "role": user_entry["role"]}
         )
@@ -360,6 +452,7 @@ def login(user: UserLogin, request: Request):
         return {
             "access_token": token,
             "token_type": "bearer",
+            "id": user_entry["id"],    
             "email": user_entry["email"],
             "role": user_entry["role"],
             "name": user_entry["name"],
@@ -386,16 +479,82 @@ def get_logs(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lecture logs: {str(e)}")
 
+@app.post("/refresh-likes/{user_id}")
+async def refresh_user_likes(user_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        cursor.execute("""
+            SELECT tf.id as tracked_flight_id, tf."from" as depart, tf.dest as arrivee, tf.day as jour, tf.passengers_nbr as passagers
+            FROM "Likes" l
+            JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id
+            WHERE l.user_id = %s
+        """, (user_id,))
+        liked_flights = cursor.fetchall()
+
+        if not liked_flights:
+            return {"message": "Aucun vol à rafraîchir."}
+
+        updates = 0
+        
+        async with httpx.AsyncClient() as client:
+            for flight in liked_flights:
+                url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
+                querystring = {
+                    "departure_id": flight["depart"],
+                    "arrival_id": flight["arrivee"], 
+                    "outbound_date": flight["jour"],
+                    "adults": flight["passagers"],
+                    "currency": "EUR",
+                }
+                headers = {
+                    "X-RapidAPI-Key": RAPIDAPI_KEY, 
+                    "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
+                }
+
+                try:
+                    response = await client.get(url, headers=headers, params=querystring, timeout=15.0)
+                    if response.status_code == 200:
+                        data = response.json()
+                        itineraries = data.get("data", {}).get("itineraries", {})
+                        flights_list = itineraries.get("topFlights", []) + itineraries.get("otherFlights", [])
+
+                        if flights_list:
+                            min_price = min(
+                                (opt.get("price", {}).get("raw", 9999) if isinstance(opt.get("price"), dict) else opt.get("price", 9999))
+                                for opt in flights_list
+                            )
+
+                            cursor.execute("""
+                                INSERT INTO "Price_History" (tracked_flight_id, price)
+                                VALUES (%s, %s);
+                            """, (flight["tracked_flight_id"], min_price))
+                            updates += 1
+
+                except Exception as e:
+                    print(f"Erreur API lors du rafraîchissement du vol {flight['tracked_flight_id']}: {e}")
+
+                await asyncio.sleep(1)
+
+        conn.commit()
+        return {"message": f"Mise à jour terminée ! {updates} prix actualisés."}
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Erreur SQL lors du refresh : {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors du rafraîchissement")
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.post("/search-destination")
 @limiter.limit("20 per minute")
 def search_destination(request: SearchRequest, request_obj: Request):
-    # request_obj est utilisé par SlowAPI, request est ton modèle Pydantic
     cleaned_query = sanitize_input(request.query)
     return {"cleaned_query": cleaned_query}
 
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="127.0.0.1", port=8000)
