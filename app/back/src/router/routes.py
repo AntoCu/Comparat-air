@@ -265,7 +265,7 @@ def search_destination(request: SearchRequest, request_obj: Request):
     return {"cleaned_query": sanitize_input(request.query)}
 
 
-@router.get("/cron/refresh-price")
+@router.get("/cron/refresh-prices")
 async def auto_refresh_flight_prices(authorization: str = Header(None)):
     """Route appelée uniquement par Vercel pour mettre à jour les prix"""
 
