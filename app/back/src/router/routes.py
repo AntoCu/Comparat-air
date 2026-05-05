@@ -14,7 +14,6 @@ from src.internal.security import (
 )
 from src.internal.logger import log_failed_login
 
-# C'est ici que la magie opère : APIRouter remplace le "app"
 router = APIRouter()
 
 @router.post("/search-flights")
@@ -52,10 +51,12 @@ async def add_like(like: FlightLikeRequest):
         cursor.execute('INSERT INTO "Likes" (user_id, tracked_flight_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;', (like.user_id, tracked_flight_id))
         conn.commit()
         
-        if cursor.rowcount == 0: return {"message": "Ce vol est déjà dans tes favoris !"}
+        if cursor.rowcount == 0:
+            return {"message": "Ce vol est déjà dans tes favoris !"}
         return {"message": "Vol ajouté aux favoris avec succès"}
-    except Exception as e:
-        if conn: conn.rollback()
+    except Exception:
+        if conn:
+            conn.rollback()
         return {"error": "Impossible d'ajouter ce vol aux favoris"}
     finally:
         if conn:
@@ -66,13 +67,15 @@ async def add_like(like: FlightLikeRequest):
 @router.post("/register")
 def register(user: UserRegister):
     clean_email, clean_name = sanitize_input(user.email), sanitize_input(user.name)
-    if not is_password_strong(user.password): raise HTTPException(status_code=400, detail="Mot de passe trop faible")
+    if not is_password_strong(user.password):
+        raise HTTPException(status_code=400, detail="Mot de passe trop faible")
 
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
         cursor.execute('SELECT id FROM "Users" WHERE email = %s OR name = %s', (clean_email, clean_name))
-        if cursor.fetchone(): raise HTTPException(status_code=400, detail="Email ou nom déjà utilisé")
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Email ou nom déjà utilisé")
 
         cursor.execute('SELECT COUNT(*) as count FROM "Users"')
         role = "admin" if cursor.fetchone()["count"] == 0 else "standard"
@@ -132,8 +135,10 @@ def login(user: UserLogin, request: Request):
 
 @router.get("/admin/logs")
 def get_logs(request: Request):
-    if get_current_user_role(request) != "admin": raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
-    if not LOG_FILE_PATH.exists(): return []
+    if get_current_user_role(request) != "admin":
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+    if not LOG_FILE_PATH.exists():
+        return []
     try:
         with open(LOG_FILE_PATH, "r", encoding="utf-8") as f:
             logs = [json.loads(line) for line in f.readlines() if line.strip()]
@@ -149,7 +154,8 @@ async def refresh_user_likes(user_id: int):
     try:
         cursor.execute('SELECT tf.id as tracked_flight_id, tf."from" as depart, tf.dest as arrivee, tf.day as jour, tf.passengers_nbr as passagers FROM "Likes" l JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id WHERE l.user_id = %s', (user_id,))
         liked_flights = cursor.fetchall()
-        if not liked_flights: return {"message": "Aucun vol à rafraîchir."}
+        if not liked_flights:
+            return {"message": "Aucun vol à rafraîchir."}
 
         updates = 0
         async with httpx.AsyncClient() as client:
@@ -164,7 +170,8 @@ async def refresh_user_likes(user_id: int):
                             min_price = min((opt.get("price", {}).get("raw", 9999) if isinstance(opt.get("price"), dict) else opt.get("price", 9999)) for opt in flights_list)
                             cursor.execute('INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);', (flight["tracked_flight_id"], min_price))
                             updates += 1
-                except Exception: pass
+                except Exception:
+                    pass
                 await asyncio.sleep(1)
         conn.commit()
         return {"message": f"Mise à jour terminée ! {updates} prix actualisés."}
