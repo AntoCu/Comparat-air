@@ -66,16 +66,18 @@ def get_db_connection():
     except Exception as e:
         print(f"Erreur de connexion à la base de données : {e}")
         raise HTTPException(status_code=500, detail="Erreur serveur (Base de données)")
-    
+
+
 class FlightLikeRequest(BaseModel):
     user_id: int
     flight_id: str
-    depart: str      
-    arrivee: str     
-    jour: str        
+    depart: str
+    arrivee: str
+    jour: str
     prix: float
     passagers: int
-    
+
+
 class FlightSearchRequest(BaseModel):
     departure: str
     date: str
@@ -239,12 +241,20 @@ async def fetch_airport(client, dest, search, rapidapi_key):
                     segments = option.get("flights") or []
                     arrivee_nom = dest
                     depart_code = search.departure
-                    
+
                     if segments:
                         if isinstance(segments[-1], dict):
-                            arrivee_nom = segments[-1].get("arrival_airport", {}).get("airport_name", dest)
+                            arrivee_nom = (
+                                segments[-1]
+                                .get("arrival_airport", {})
+                                .get("airport_name", dest)
+                            )
                         if isinstance(segments[0], dict):
-                            depart_code = segments[0].get("departure_airport", {}).get("airport_code", search.departure)
+                            depart_code = (
+                                segments[0]
+                                .get("departure_airport", {})
+                                .get("airport_code", search.departure)
+                            )
 
                     carbon = option.get("carbon_emissions")
                     co2_kg = 0
@@ -255,11 +265,11 @@ async def fetch_airport(client, dest, search, rapidapi_key):
                         co2_val = carbon.get("CO2e")
                         if isinstance(co2_val, (int, float)):
                             co2_kg = int(co2_val / 1000)
-                        
+
                         diff_val = carbon.get("difference_percent")
                         if isinstance(diff_val, (int, float)):
                             diff_percent = int(diff_val)
-                            
+
                         is_higher = "higher" in carbon
 
                     dest_flights.append(
@@ -273,34 +283,34 @@ async def fetch_airport(client, dest, search, rapidapi_key):
                             "passagers": search.passengers,
                             "emissions_co2": co2_kg,
                             "emissions_diff": diff_percent,
-                            "emissions_higher": is_higher
+                            "emissions_higher": is_higher,
                         }
                     )
             return dest_flights
         else:
-            return []  
+            return []
     except Exception as e:
         print(f"❌ Erreur critique pour {dest}: {type(e).__name__} - {str(e)}")
         return []
+
 
 @app.post("/search-flights")
 async def search_flights(search: FlightSearchRequest):
     rapidapi_key = RAPIDAPI_KEY
     all_flights = []
-    
+
     async with httpx.AsyncClient() as client:
         for dest in DESTINATIONS:
             print(f"✈️ Recherche vers {dest} en cours...")
-            
+
             airport_results = await fetch_airport(client, dest, search, rapidapi_key)
             all_flights.extend(airport_results)
-            
+
             await asyncio.sleep(1.5)
 
     # On trie du moins cher au plus cher
     all_flights = sorted(all_flights, key=lambda x: x["prix"])
     return {"results": all_flights}
-
 
 
 @app.post("/like")
@@ -310,32 +320,41 @@ async def add_like(like: FlightLikeRequest):
         conn = psycopg2.connect(DATABASE_URL)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO "Tracked_Flights" (flight_id, "from", dest, day, passengers_nbr)
             VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT ("flight_id", "passengers_nbr") 
             DO UPDATE SET flight_id = EXCLUDED.flight_id
             RETURNING id;
-        """, (like.flight_id, like.depart, like.arrivee, like.jour, like.passagers))
-        
+        """,
+            (like.flight_id, like.depart, like.arrivee, like.jour, like.passagers),
+        )
+
         tracked_flight_id = cursor.fetchone()[0]
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO "Price_History" (tracked_flight_id, price)
             VALUES (%s, %s);
-        """, (tracked_flight_id, like.prix))
+        """,
+            (tracked_flight_id, like.prix),
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO "Likes" (user_id, tracked_flight_id)
             VALUES (%s, %s)
             ON CONFLICT ("user_id", "tracked_flight_id") DO NOTHING;
-        """, (like.user_id, tracked_flight_id))
+        """,
+            (like.user_id, tracked_flight_id),
+        )
 
         conn.commit()
-        
+
         if cursor.rowcount == 0:
             return {"message": "Ce vol est déjà dans tes favoris !"}
-            
+
         print(f"✅ Vol {like.flight_id} liké avec succès par l'user {like.user_id} !")
         return {"message": "Vol ajouté aux favoris avec succès"}
 
@@ -344,11 +363,12 @@ async def add_like(like: FlightLikeRequest):
             conn.rollback()
         print(f"❌ Erreur SQL lors du Like : {e}")
         return {"error": "Impossible d'ajouter ce vol aux favoris"}
-        
+
     finally:
         if conn:
             cursor.close()
             conn.close()
+
 
 @app.post("/register")
 def register(user: UserRegister):
@@ -389,13 +409,15 @@ def register(user: UserRegister):
         cursor.close()
         conn.close()
 
+
 @app.get("/likes/{user_id}")
 def get_user_likes(user_id: int):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
+
     try:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT 
                 tf.id, 
                 tf.flight_id, 
@@ -408,18 +430,23 @@ def get_user_likes(user_id: int):
             JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id
             WHERE l.user_id = %s
             ORDER BY l.id DESC;
-        """, (user_id,))
-        
+        """,
+            (user_id,),
+        )
+
         likes = cursor.fetchall()
         return {"likes": likes}
-        
+
     except Exception as e:
         print(f"❌ Erreur SQL lors de la récupération des likes : {e}")
-        raise HTTPException(status_code=500, detail="Impossible de récupérer les favoris")
+        raise HTTPException(
+            status_code=500, detail="Impossible de récupérer les favoris"
+        )
     finally:
         cursor.close()
         conn.close()
-        
+
+
 @app.post("/login")
 @limiter.limit("5 per minute")
 def login(user: UserLogin, request: Request):
@@ -452,7 +479,7 @@ def login(user: UserLogin, request: Request):
         return {
             "access_token": token,
             "token_type": "bearer",
-            "id": user_entry["id"],    
+            "id": user_entry["id"],
             "email": user_entry["email"],
             "role": user_entry["role"],
             "name": user_entry["name"],
@@ -479,61 +506,78 @@ def get_logs(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lecture logs: {str(e)}")
 
+
 @app.post("/refresh-likes/{user_id}")
 async def refresh_user_likes(user_id: int):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
+
     try:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT tf.id as tracked_flight_id, tf."from" as depart, tf.dest as arrivee, tf.day as jour, tf.passengers_nbr as passagers
             FROM "Likes" l
             JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id
             WHERE l.user_id = %s
-        """, (user_id,))
+        """,
+            (user_id,),
+        )
         liked_flights = cursor.fetchall()
 
         if not liked_flights:
             return {"message": "Aucun vol à rafraîchir."}
 
         updates = 0
-        
+
         async with httpx.AsyncClient() as client:
             for flight in liked_flights:
                 url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
                 querystring = {
                     "departure_id": flight["depart"],
-                    "arrival_id": flight["arrivee"], 
+                    "arrival_id": flight["arrivee"],
                     "outbound_date": flight["jour"],
                     "adults": flight["passagers"],
                     "currency": "EUR",
                 }
                 headers = {
-                    "X-RapidAPI-Key": RAPIDAPI_KEY, 
+                    "X-RapidAPI-Key": RAPIDAPI_KEY,
                     "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
                 }
 
                 try:
-                    response = await client.get(url, headers=headers, params=querystring, timeout=15.0)
+                    response = await client.get(
+                        url, headers=headers, params=querystring, timeout=15.0
+                    )
                     if response.status_code == 200:
                         data = response.json()
                         itineraries = data.get("data", {}).get("itineraries", {})
-                        flights_list = itineraries.get("topFlights", []) + itineraries.get("otherFlights", [])
+                        flights_list = itineraries.get(
+                            "topFlights", []
+                        ) + itineraries.get("otherFlights", [])
 
                         if flights_list:
                             min_price = min(
-                                (opt.get("price", {}).get("raw", 9999) if isinstance(opt.get("price"), dict) else opt.get("price", 9999))
+                                (
+                                    opt.get("price", {}).get("raw", 9999)
+                                    if isinstance(opt.get("price"), dict)
+                                    else opt.get("price", 9999)
+                                )
                                 for opt in flights_list
                             )
 
-                            cursor.execute("""
+                            cursor.execute(
+                                """
                                 INSERT INTO "Price_History" (tracked_flight_id, price)
                                 VALUES (%s, %s);
-                            """, (flight["tracked_flight_id"], min_price))
+                            """,
+                                (flight["tracked_flight_id"], min_price),
+                            )
                             updates += 1
 
                 except Exception as e:
-                    print(f"Erreur API lors du rafraîchissement du vol {flight['tracked_flight_id']}: {e}")
+                    print(
+                        f"Erreur API lors du rafraîchissement du vol {flight['tracked_flight_id']}: {e}"
+                    )
 
                 await asyncio.sleep(1)
 
@@ -548,6 +592,7 @@ async def refresh_user_likes(user_id: int):
         cursor.close()
         conn.close()
 
+
 @app.post("/search-destination")
 @limiter.limit("20 per minute")
 def search_destination(request: SearchRequest, request_obj: Request):
@@ -557,4 +602,5 @@ def search_destination(request: SearchRequest, request_obj: Request):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)
