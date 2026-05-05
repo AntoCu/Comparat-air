@@ -42,7 +42,8 @@ async def fetch_airport(client, dest: str, search: FlightSearchRequest, rapidapi
 
                     if isinstance(carbon, dict):
                         co2_val = carbon.get("CO2e")
-                        if isinstance(co2_val, (int, float)): co2_kg = int(co2_val / 1000)
+                        if isinstance(co2_val, (int, float)): 
+                            co2_kg = int(co2_val / 1000)
                         diff_val = carbon.get("difference_percent")
                         if isinstance(diff_val, (int, float)): 
                             diff_percent = int(diff_val)
