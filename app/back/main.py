@@ -576,7 +576,7 @@ async def refresh_user_likes(user_id: int):
 
                 except Exception as e:
                     print(
-                        f"Erreur API lors du rafraîchissement du vol {flight['tracked_flight_id']}: {e}"
+                        f"Erreur API lors du rafraîchissement s du vol {flight['tracked_flight_id']}: {e}"
                     )
 
                 await asyncio.sleep(1)
