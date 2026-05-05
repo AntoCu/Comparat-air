@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from src.internal.config import LOG_FILE_PATH
 
+
 def setup_access_logger() -> logging.Logger:
     logger = logging.getLogger("fastapi_access")
     logger.setLevel(logging.INFO)
@@ -18,7 +19,9 @@ def setup_access_logger() -> logging.Logger:
     logger.addHandler(handler)
     return logger
 
+
 ACCESS_LOGGER = setup_access_logger()
+
 
 def log_failed_login(user_email: str, ip_address: str, reason: str) -> None:
     log_entry = {

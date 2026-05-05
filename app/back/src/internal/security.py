@@ -10,20 +10,35 @@ HASH_NAME = "sha256"
 HASH_ITERATIONS = 120_000
 SALT_LENGTH = 16
 MIN_PASSWORD_LENGTH = 8
-COMMON_WEAK_PASSWORDS = {"123456", "12345678", "password", "admin", "azerty", "qwerty", "12345"}
+COMMON_WEAK_PASSWORDS = {
+    "123456",
+    "12345678",
+    "password",
+    "admin",
+    "azerty",
+    "qwerty",
+    "12345",
+}
+
 
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(SALT_LENGTH)
-    derived = hashlib.pbkdf2_hmac(HASH_NAME, password.encode(), salt.encode(), HASH_ITERATIONS)
+    derived = hashlib.pbkdf2_hmac(
+        HASH_NAME, password.encode(), salt.encode(), HASH_ITERATIONS
+    )
     return f"{salt}${derived.hex()}"
+
 
 def verify_password(password: str, stored_hash: str) -> bool:
     try:
         salt, stored_hex = stored_hash.split("$", 1)
-        derived = hashlib.pbkdf2_hmac(HASH_NAME, password.encode(), salt.encode(), HASH_ITERATIONS)
+        derived = hashlib.pbkdf2_hmac(
+            HASH_NAME, password.encode(), salt.encode(), HASH_ITERATIONS
+        )
         return secrets.compare_digest(derived.hex(), stored_hex)
     except ValueError:
         return False
+
 
 def is_password_strong(password: str) -> bool:
     if len(password) < MIN_PASSWORD_LENGTH or password.lower() in COMMON_WEAK_PASSWORDS:
@@ -34,11 +49,13 @@ def is_password_strong(password: str) -> bool:
     has_spec = any(not c.isalnum() for c in password)
     return all([has_upper, has_lower, has_digit, has_spec])
 
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def get_current_user_role(request: Request):
     auth_header = request.headers.get("Authorization")
@@ -52,6 +69,7 @@ def get_current_user_role(request: Request):
         raise HTTPException(status_code=401, detail="Session expirée")
     except Exception:
         raise HTTPException(status_code=401, detail="Jeton invalide")
+
 
 def sanitize_input(text: str) -> str:
     text = text.strip()
