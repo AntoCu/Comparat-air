@@ -1,3 +1,4 @@
+from typing import List
 from pydantic import BaseModel
 
 
@@ -32,3 +33,9 @@ class UserLogin(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
+
+class GroupFlightSearchRequest(BaseModel):
+    departures: List[str]
+    date: str
+    max_price: float
+    is_direct: bool = False
