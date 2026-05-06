@@ -13,7 +13,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # API Tiers
 RAPIDAPI_KEY = "d9bee26769mshb58290d712a14f7p1eeab9jsnf8a45fc32106"
-DESTINATIONS = ["JFK", "LHR", "LAX"]
+DESTINATIONS = ["JFK", "LHR", "BER"]
 
 # Logs
 LOG_FILE_PATH = Path("/var/log/skystream/access.log")
