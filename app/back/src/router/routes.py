@@ -1,7 +1,8 @@
+import os
 import httpx
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Header, Request
 from psycopg2.extras import RealDictCursor
 
 from src.models import (
@@ -26,13 +27,15 @@ from src.internal.logger import log_failed_login
 
 router = APIRouter()
 
+CRON_SECRET = os.environ["CRON_SECRET"]
+
 
 @router.post("/search-flights")
 async def search_flights(search: FlightSearchRequest):
     all_flights = []
     async with httpx.AsyncClient() as client:
         for dest in DESTINATIONS:
-            print(f"✈️ Recherche vers {dest} en cours...")
+            print(f" Recherche vers {dest} en cours...")
             airport_results = await fetch_airport(client, dest, search, RAPIDAPI_KEY)
             all_flights.extend(airport_results)
             await asyncio.sleep(1.5)
@@ -260,3 +263,83 @@ async def refresh_user_likes(user_id: int):
 @limiter.limit("20 per minute")
 def search_destination(request: SearchRequest, request_obj: Request):
     return {"cleaned_query": sanitize_input(request.query)}
+
+
+@router.get("/cron/refresh-prices")
+async def auto_refresh_flight_prices(authorization: str = Header(None)):
+    """Route appelée uniquement par Vercel pour mettre à jour les prix"""
+
+    if authorization != f"Bearer {CRON_SECRET}":
+        raise HTTPException(status_code=401, detail="Accès refusé. Mauvais token.")
+
+    print("[VERCEL CRON] Démarrage de l'actualisation automatique...")
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    try:
+        cursor.execute(
+            'SELECT id, "from" as depart, dest as arrivee, day as jour, passengers_nbr as passagers FROM "Tracked_Flights"'
+        )
+        tracked_flights = cursor.fetchall()
+
+        if not tracked_flights:
+            return {"status": "ok", "message": "Aucun vol à actualiser."}
+
+        updates = 0
+        async with httpx.AsyncClient() as client:
+            for flight in tracked_flights:
+                url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
+                querystring = {
+                    "departure_id": flight["depart"],
+                    "arrival_id": flight["arrivee"],
+                    "outbound_date": flight["jour"],
+                    "adults": flight["passagers"],
+                    "currency": "EUR",
+                }
+                headers = {
+                    "X-RapidAPI-Key": RAPIDAPI_KEY,
+                    "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
+                }
+
+                try:
+                    response = await client.get(
+                        url, headers=headers, params=querystring, timeout=15.0
+                    )
+                    if response.status_code == 200:
+                        itineraries = (
+                            response.json().get("data", {}).get("itineraries", {})
+                        )
+                        flights_list = itineraries.get(
+                            "topFlights", []
+                        ) + itineraries.get("otherFlights", [])
+
+                        if flights_list:
+                            min_price = min(
+                                (
+                                    opt.get("price", {}).get("raw", 9999)
+                                    if isinstance(opt.get("price"), dict)
+                                    else opt.get("price", 9999)
+                                )
+                                for opt in flights_list
+                            )
+                            cursor.execute(
+                                'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
+                                (flight["id"], min_price),
+                            )
+                            updates += 1
+                except Exception as e:
+                    print(f" Erreur API : {e}")
+
+                await asyncio.sleep(1.5)
+
+        conn.commit()
+        return {"status": "success", "updates": updates}
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            cursor.close()
+            conn.close()
