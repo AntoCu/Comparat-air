@@ -12,7 +12,9 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 # Sécurité JWT (Sécurisé : on retire le fallback dangereux)
 SECRET_KEY = os.environ["SECRET_KEY"]
-ALGORITHM = os.getenv("ALGORITHM", "HS256") # Le fallback est OK ici car ce n'est pas un secret
+ALGORITHM = os.getenv(
+    "ALGORITHM", "HS256"
+)  # Le fallback est OK ici car ce n'est pas un secret
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # API Tiers (Sécurisé : plantera si absent du .env)
