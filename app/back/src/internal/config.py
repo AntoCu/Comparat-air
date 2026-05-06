@@ -2,18 +2,24 @@ import os
 from pathlib import Path
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from dotenv import load_dotenv
 
-# Base de données
-DATABASE_URL = "postgresql://neondb_owner:npg_z4BquTZrYU1M@ep-twilight-hall-al7uza0i-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+# 1. On charge le fichier .env dès le début
+load_dotenv()
 
-# Sécurité JWT
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-key-pour-les-tests")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
+# Base de données (Sécurisé : plantera si absent du .env)
+DATABASE_URL = os.environ["DATABASE_URL"]
+
+# Sécurité JWT (Sécurisé : on retire le fallback dangereux)
+SECRET_KEY = os.environ["SECRET_KEY"]
+ALGORITHM = os.getenv(
+    "ALGORITHM", "HS256"
+)  # Le fallback est OK ici car ce n'est pas un secret
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# API Tiers
-RAPIDAPI_KEY = "d9bee26769mshb58290d712a14f7p1eeab9jsnf8a45fc32106"
-DESTINATIONS = ["JFK", "LHR", "BER"]
+# API Tiers (Sécurisé : plantera si absent du .env)
+RAPIDAPI_KEY = os.environ["RAPIDAPI_KEY"]
+DESTINATIONS = ["JFK", "LHR", "LAX"]
 
 # Logs
 LOG_FILE_PATH = Path("/var/log/skystream/access.log")
