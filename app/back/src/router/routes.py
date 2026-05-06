@@ -27,7 +27,7 @@ from src.internal.logger import log_failed_login
 
 router = APIRouter()
 
-CRON_SECRET = os.getenv("CRON_SECRET", "AdminPfe2026%")
+CRON_SECRET = os.environ["CRON_SECRET"]
 
 
 @router.post("/search-flights")
