@@ -8,6 +8,7 @@ from psycopg2.extras import RealDictCursor
 from src.models import (
     FlightSearchRequest,
     FlightLikeRequest,
+    GroupFlightSearchRequest,
     UserRegister,
     UserLogin,
     SearchRequest,
@@ -42,6 +43,56 @@ async def search_flights(search: FlightSearchRequest):
 
     all_flights = sorted(all_flights, key=lambda x: x["prix"])
     return {"results": all_flights}
+
+
+@router.post("/search-group-flights")
+async def search_group_flights(search: GroupFlightSearchRequest):
+    all_combinations = []
+
+    async with httpx.AsyncClient() as client:
+        for dest in DESTINATIONS:
+            print(f"👯 Recherche de groupe vers {dest} en cours...")
+
+            dest_flights_by_dep = []
+            valid_combination = True
+
+            for dep in search.departures:
+                if not dep.strip():
+                    continue
+
+                s = FlightSearchRequest(
+                    departure=dep,
+                    date=search.date,
+                    max_price=search.max_price,
+                    passengers=1,
+                    is_direct=search.is_direct,
+                )
+
+                res = await fetch_airport(client, dest, s, RAPIDAPI_KEY)
+
+                if not res:
+                    valid_combination = False
+                    break
+
+                cheapest = min(res, key=lambda x: x["prix"])
+                dest_flights_by_dep.append(cheapest)
+
+                await asyncio.sleep(1.5)
+
+            if valid_combination and dest_flights_by_dep:
+                total_price = sum(f["prix"] for f in dest_flights_by_dep)
+
+                if total_price <= search.max_price:
+                    all_combinations.append(
+                        {
+                            "destination": dest,
+                            "total_price": total_price,
+                            "flights": dest_flights_by_dep,
+                        }
+                    )
+
+    all_combinations = sorted(all_combinations, key=lambda x: x["total_price"])
+    return {"results": all_combinations}
 
 
 @router.post("/like")
