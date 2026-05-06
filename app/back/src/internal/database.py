@@ -2,6 +2,7 @@ import psycopg2
 from fastapi import HTTPException
 from src.internal.config import DATABASE_URL
 
+
 def get_db_connection():
     try:
         conn = psycopg2.connect(DATABASE_URL)

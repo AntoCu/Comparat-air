@@ -34,6 +34,7 @@ class UserLogin(BaseModel):
 class SearchRequest(BaseModel):
     query: str
 
+
 class GroupFlightSearchRequest(BaseModel):
     departures: List[str]
     date: str
