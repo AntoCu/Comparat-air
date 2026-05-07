@@ -24,5 +24,8 @@ DESTINATIONS = ["JFK", "LHR", "LAX"]
 # Logs
 LOG_FILE_PATH = Path("/var/log/skystream/access.log")
 
+MAIL_USER = os.getenv("MAIL_USER")
+MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+
 # Rate Limiter
 limiter = Limiter(key_func=get_remote_address)

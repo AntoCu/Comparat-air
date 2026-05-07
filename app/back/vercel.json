@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/cron/refresh-prices",
-      "schedule": "06 7 * * *" 
+      "schedule": "06 6 * * *" 
     }
   ]
 }

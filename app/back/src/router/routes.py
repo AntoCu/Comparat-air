@@ -2,7 +2,7 @@ import os
 import httpx
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, BackgroundTasks
 from psycopg2.extras import RealDictCursor
 
 from src.models import (
@@ -13,6 +13,7 @@ from src.models import (
     UserLogin,
     SearchRequest,
 )
+from src.internal.mail import send_price_drop_email
 from src.router.tasks import fetch_airport
 from src.internal.config import RAPIDAPI_KEY, DESTINATIONS, limiter, LOG_FILE_PATH
 from src.internal.database import get_db_connection
@@ -244,15 +245,29 @@ def get_logs(request: Request):
 
 
 @router.post("/refresh-likes/{user_id}")
-async def refresh_user_likes(user_id: int):
+async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks): 
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
         cursor.execute(
-            'SELECT tf.id as tracked_flight_id, tf."from" as depart, tf.dest as arrivee, tf.day as jour, tf.passengers_nbr as passagers FROM "Likes" l JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id WHERE l.user_id = %s',
+            """
+            SELECT 
+                u.email as user_email,
+                tf.id as tracked_flight_id, 
+                tf."from" as depart, 
+                tf.dest as arrivee, 
+                tf.day as jour, 
+                tf.passengers_nbr as passagers,
+                (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = tf.id ORDER BY id DESC LIMIT 1) as old_price
+            FROM "Likes" l 
+            JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id 
+            JOIN "Users" u ON l.user_id = u.id
+            WHERE l.user_id = %s
+            """,
             (user_id,),
         )
         liked_flights = cursor.fetchall()
+        
         if not liked_flights:
             return {"message": "Aucun vol à rafraîchir."}
 
@@ -283,6 +298,7 @@ async def refresh_user_likes(user_id: int):
                         ).get("topFlights", []) + response.json().get("data", {}).get(
                             "itineraries", {}
                         ).get("otherFlights", [])
+                        
                         if flights_list:
                             min_price = min(
                                 (
@@ -292,33 +308,50 @@ async def refresh_user_likes(user_id: int):
                                 )
                                 for opt in flights_list
                             )
+                            
                             cursor.execute(
                                 'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
                                 (flight["tracked_flight_id"], min_price),
                             )
                             updates += 1
-                except Exception:
+
+                            old_price = flight["old_price"]
+                            if old_price is not None and min_price < old_price:
+                                print(f"Baisse détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€")
+                                
+                                background_tasks.add_task(
+                                    send_price_drop_email,
+                                    user_email=flight["user_email"],
+                                    depart=flight["depart"],
+                                    arrivee=flight["arrivee"],
+                                    old_price=float(old_price),
+                                    new_price=float(min_price)
+                                )
+
+                except Exception as e:
+                    print(f"Erreur avec l'API Flights : {e}")
                     pass
-                await asyncio.sleep(1)
+                
+                await asyncio.sleep(1) 
+                
         conn.commit()
-        return {"message": f"Mise à jour terminée ! {updates} prix actualisés."}
-    except Exception:
+        return {"message": f"Mise à jour terminée ! {updates} prix actualisés. Les alertes mail sont parties si besoin."}
+    except Exception as e:
         conn.rollback()
+        print(f"Erreur SQL Refresh : {e}")
         raise HTTPException(status_code=500, detail="Erreur lors du rafraîchissement")
     finally:
         cursor.close()
         conn.close()
-
 
 @router.post("/search-destination")
 @limiter.limit("20 per minute")
 def search_destination(request: SearchRequest, request_obj: Request):
     return {"cleaned_query": sanitize_input(request.query)}
 
-
 @router.get("/cron/refresh-prices")
-async def auto_refresh_flight_prices(authorization: str = Header(None)):
-    """Route appelée uniquement par Vercel pour mettre à jour les prix"""
+async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authorization: str = Header(None)):
+    """Route appelée uniquement par Vercel pour mettre à jour les prix et alerter les utilisateurs"""
 
     if authorization != f"Bearer {CRON_SECRET}":
         raise HTTPException(status_code=401, detail="Accès refusé. Mauvais token.")
@@ -329,7 +362,16 @@ async def auto_refresh_flight_prices(authorization: str = Header(None)):
 
     try:
         cursor.execute(
-            'SELECT id, "from" as depart, dest as arrivee, day as jour, passengers_nbr as passagers FROM "Tracked_Flights"'
+            """
+            SELECT 
+                id, 
+                "from" as depart, 
+                dest as arrivee, 
+                day as jour, 
+                passengers_nbr as passagers,
+                (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = "Tracked_Flights".id ORDER BY id DESC LIMIT 1) as old_price
+            FROM "Tracked_Flights"
+            """
         )
         tracked_flights = cursor.fetchall()
 
@@ -337,6 +379,8 @@ async def auto_refresh_flight_prices(authorization: str = Header(None)):
             return {"status": "ok", "message": "Aucun vol à actualiser."}
 
         updates = 0
+        mails_sent = 0
+        
         async with httpx.AsyncClient() as client:
             for flight in tracked_flights:
                 url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
@@ -357,12 +401,8 @@ async def auto_refresh_flight_prices(authorization: str = Header(None)):
                         url, headers=headers, params=querystring, timeout=15.0
                     )
                     if response.status_code == 200:
-                        itineraries = (
-                            response.json().get("data", {}).get("itineraries", {})
-                        )
-                        flights_list = itineraries.get(
-                            "topFlights", []
-                        ) + itineraries.get("otherFlights", [])
+                        itineraries = response.json().get("data", {}).get("itineraries", {})
+                        flights_list = itineraries.get("topFlights", []) + itineraries.get("otherFlights", [])
 
                         if flights_list:
                             min_price = min(
@@ -373,18 +413,46 @@ async def auto_refresh_flight_prices(authorization: str = Header(None)):
                                 )
                                 for opt in flights_list
                             )
+                            
                             cursor.execute(
                                 'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
                                 (flight["id"], min_price),
                             )
                             updates += 1
+
+                            old_price = flight["old_price"]
+                            if old_price is not None and min_price < old_price:
+                                print(f"[CRON] Baisse globale détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€")
+                                
+                                cursor.execute(
+                                    """
+                                    SELECT u.email 
+                                    FROM "Likes" l
+                                    JOIN "Users" u ON l.user_id = u.id
+                                    WHERE l.tracked_flight_id = %s
+                                    """,
+                                    (flight["id"],)
+                                )
+                                users_to_notify = cursor.fetchall()
+
+                                for user in users_to_notify:
+                                    background_tasks.add_task(
+                                        send_price_drop_email,
+                                        user_email=user["email"],
+                                        depart=flight["depart"],
+                                        arrivee=flight["arrivee"],
+                                        old_price=float(old_price),
+                                        new_price=float(min_price)
+                                    )
+                                    mails_sent += 1
+
                 except Exception as e:
-                    print(f" Erreur API : {e}")
+                    print(f"[CRON] Erreur API pour le vol {flight['id']} : {e}")
 
                 await asyncio.sleep(1.5)
 
         conn.commit()
-        return {"status": "success", "updates": updates}
+        return {"status": "success", "updates": updates, "mails_queued": mails_sent}
 
     except Exception as e:
         if conn:
