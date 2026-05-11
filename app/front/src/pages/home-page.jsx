@@ -1,75 +1,75 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function HomePage() {
-  const [isGroupMode, setIsGroupMode] = useState(false);
-  
-  // États de recherche
-  const [soloDeparture, setSoloDeparture] = useState('CDG');
-  const [groupDepartures, setGroupDepartures] = useState(['CDG', 'MRS']); // Tableau dynamique !
-  
+  const [soloDeparture, setSoloDeparture] = useState('');
   const [date, setDate] = useState('');
-  const [maxPrice, setMaxPrice] = useState(500);
+  const [maxPrice, setMaxPrice] = useState('');
   const [passengers, setPassengers] = useState(1);
   const [isDirect, setIsDirect] = useState(false);
-  
+
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState({});
   const [sortBy, setSortBy] = useState('price_asc');
 
-  // --- GESTION DES DÉPARTS DE GROUPE ---
-  const handleGroupDepChange = (index, value) => {
-    const newDeps = [...groupDepartures];
-    newDeps[index] = value.toUpperCase();
-    setGroupDepartures(newDeps);
+  const [animationState, setAnimationState] = useState('idle');
+  const [expandedDest, setExpandedDest] = useState(null);
+
+  const [likedFlights, setLikedFlights] = useState(new Set());
+
+  const getFlightSignature = (depart, arrivee, horaire) => {
+    return `${depart}-${arrivee}-${horaire}`;
   };
 
-  const addGroupDeparture = () => {
-    if (groupDepartures.length < 4) {
-      setGroupDepartures([...groupDepartures, '']);
-    }
-  };
+  useEffect(() => { 
+    const fetchUserLikes = async () => {
+      const userId = localStorage.getItem("user_id");
+      if (!userId) return; 
 
-  const removeGroupDeparture = (index) => {
-    if (groupDepartures.length > 2) {
-      setGroupDepartures(groupDepartures.filter((_, i) => i !== index));
-    }
-  };
-  // ------------------------------------
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/likes/${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const likedIds = new Set(data.likes.map(like => like.flight_id));
+          setLikedFlights(likedIds);
+        }
+      } catch (error) {
+        console.error("Erreur lors de la récupération des favoris :", error);
+      }
+    };
+
+    fetchUserLikes();
+  }, []);
 
   const handleSearch = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setResults([]);
-    setExpandedGroups({});
+    setAnimationState('taking_off');
 
-    const endpoint = isGroupMode ? 'search-group-flights' : 'search-flights';
-    const payload = isGroupMode 
-      ? {
-          departures: groupDepartures.filter(dep => dep.trim() !== ''), // On envoie le tableau au backend !
-          date: date,
-          max_price: Number(maxPrice),
-          is_direct: isDirect
-        }
-      : {
-          departure: soloDeparture,
-          date: date,
-          max_price: Number(maxPrice),
-          passengers: Number(passengers),
-          is_direct: isDirect
-        };
+    const payload = {
+      departure: soloDeparture.toUpperCase(),
+      date,
+      max_price: Number(maxPrice),
+      passengers: Number(passengers),
+      is_direct: isDirect
+    };
+
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setAnimationState('searching');
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/${endpoint}`, {
+      const response = await fetch(`http://127.0.0.1:8000/search-flights`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
+
       setResults(data.results || []);
+      setAnimationState('landed');
     } catch (error) {
       console.error("Erreur de recherche", error);
-      alert("Impossible de contacter le serveur.");
+      setAnimationState('idle');
     } finally {
       setIsLoading(false);
     }
@@ -77,209 +77,259 @@ export default function HomePage() {
 
   const handleLike = async (flight) => {
     const idUtilisateurActuel = localStorage.getItem("user_id");
-    if (!idUtilisateurActuel) {
-      alert("⚠️ Tu dois être connecté pour ajouter un vol en favori !");
-      return; 
-    }
+    if (!idUtilisateurActuel) return alert("⚠️ Tu dois être connecté pour sauvegarder un vol !");
+
+    const signature = getFlightSignature(flight.depart, flight.arrivee, flight.horaire_depart);
+    if (likedFlights.has(signature)) return;
 
     const payload = {
-      user_id: Number(idUtilisateurActuel),
-      flight_id: String(flight.id),
-      depart: String(flight.depart || "Inconnu"), // Le backend nous fournit le départ exact !
-      arrivee: String(flight.arrivee || flight.arrival || "Inconnu"),
-      jour: String(flight.horaire_depart || flight.day || flight.date || "Inconnu"),
-      prix: Number(flight.prix || flight.price || 0),
-      passagers: Number(flight.passagers || 1)
+      user_id: Number(idUtilisateurActuel), flight_id: String(flight.id),
+      depart: String(flight.depart), arrivee: String(flight.arrivee),
+      jour: `${flight.horaire_depart}|${flight.horaire_arrivee}`, prix: Number(flight.prix), passagers: Number(passengers), eco_percent: flight.emissions_diff 
     };
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/like', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (response.ok) alert(`❤️ Vol vers ${payload.arrivee} à ${payload.prix}€ ajouté aux favoris !`);
-      else {
-        const errorData = await response.json();
-        alert(errorData.message || "Ce vol est déjà dans tes favoris !");
+      const response = await fetch('http://127.0.0.1:8000/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (response.ok) {
+        setLikedFlights(prev => new Set(prev).add(signature));
       }
-    } catch (error) {
-      console.error("Erreur :", error);
-    }
+    } catch (error) { console.error("Erreur :", error); }
   };
 
-  const toggleGroup = (destination) => setExpandedGroups(prev => ({ ...prev, [destination]: !prev[destination] }));
-
-  const getEcoStyle = (isHigher, diffPercent) => {
-    if (!isHigher) return { bg: '#d4edda', text: '#155724', border: '#c3e6cb' };
-    if (diffPercent <= 25) return { bg: '#fff3cd', text: '#856404', border: '#ffeeba' };
-    return { bg: '#f8d7da', text: '#721c24', border: '#f5c6cb' };
+  const resetSearch = () => {
+    setAnimationState('idle');
+    setResults([]);
+    setExpandedDest(null);
   };
 
-  const sortedSoloResults = !isGroupMode ? [...results].sort((a, b) => {
-    if (sortBy === 'price_asc') return a.prix - b.prix;
-    if (sortBy === 'price_desc') return b.prix - a.prix;
-    if (sortBy === 'eco_asc') return (a.emissions_co2 || 99999) - (b.emissions_co2 || 99999);
-    if (sortBy === 'eco_desc') return (b.emissions_co2 || 0) - (a.emissions_co2 || 0);
-    return 0;
-  }) : [];
-
-  const groupedSoloResults = sortedSoloResults.reduce((acc, flight) => {
-    const dest = flight.arrivee;
-    if (!acc[dest]) acc[dest] = [];
-    acc[dest].push(flight);
+  const groupedResults = results.reduce((acc, flight) => {
+    if (!acc[flight.arrivee]) acc[flight.arrivee] = [];
+    acc[flight.arrivee].push(flight);
     return acc;
   }, {});
 
-  const FlightCard = ({ flight }) => {
-    const ecoStyle = getEcoStyle(flight.emissions_higher, flight.emissions_diff);
-    return (
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginTop: '10px' }}>
-        <div>
-          <h4 style={{ margin: '0 0 5px 0', color: '#333' }}>{flight.depart} ➔ {flight.arrivee}</h4>
-          <p style={{ margin: '0', color: '#666', fontSize: '14px' }}>Départ : {flight.horaire_depart} <br/> Arrivée : {flight.horaire_arrivee}</p>
-          {flight.emissions_co2 > 0 && (
-            <div style={{ marginTop: '8px', display: 'inline-block', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', backgroundColor: ecoStyle.bg, color: ecoStyle.text, border: `1px solid ${ecoStyle.border}` }}>
-              🍃 {flight.emissions_co2} kg CO2e {flight.emissions_diff > 0 && <span> ({flight.emissions_higher ? '+' : '-'}{flight.emissions_diff}% vs moy)</span>}
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#28a745' }}>{flight.prix} €</span>
-          <button onClick={() => handleLike(flight)} style={{ backgroundColor: '#ff4757', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>❤️ Liker</button>
-        </div>
-      </div>
-    );
+  const sortFlights = (flights) => {
+    return [...flights].sort((a, b) => {
+      if (sortBy === 'price_asc') return a.prix - b.prix;
+      if (sortBy === 'price_desc') return b.prix - a.prix;
+      if (sortBy === 'eco_asc') return (a.emissions_co2 || 99999) - (b.emissions_co2 || 99999);
+      return 0;
+    });
+  };
+
+  const getEcoImage = (percent) => {
+    if (percent == null || percent <= 10) return '/eco-good.png';
+    if (percent <= 75) return '/eco-medium.png';
+    return '/eco-bad.png';
+  };
+
+  const extractTime = (dateStr) => {
+    if (!dateStr) return "";
+    const match = dateStr.match(/\d{1,2}:\d{2}(?:\s?[APM]{2})?/i);
+    return match ? match[0] : dateStr;
   };
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>Trouvez votre prochain vol ✈️</h1>
+    <div className="min-h-screen w-full font-sans flex flex-col overflow-x-hidden relative bg-[#f9f9fa]">
+      
+      <div 
+        className="fixed inset-0 z-0 blur-[4px] scale-105"
+        style={{
+          backgroundImage: 'url("/background.avif")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      ></div>
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-        <button onClick={() => setIsGroupMode(!isGroupMode)} style={{ padding: '10px 20px', backgroundColor: isGroupMode ? '#28a745' : '#6c757d', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {isGroupMode ? "👯 Mode Groupe Activé" : "👤 Mode Solo"}
-        </button>
-      </div>
+      <div className="relative z-10 w-full flex flex-col flex-1">
+        
+        {(animationState === 'idle' || animationState === 'taking_off') && (
+          <div className="w-full flex flex-col items-center mt-12 px-4">
 
-      <div style={{ border: '1px solid #ccc', padding: '20px', borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
-        <form onSubmit={handleSearch} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-
-          {/* AFFICHAGE DES CHAMPS SELON LE MODE */}
-          {isGroupMode ? (
-            <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <label style={{ fontWeight: 'bold' }}>Aéroports de départ de votre groupe :</label>
-              {groupDepartures.map((dep, index) => (
-                <div key={index} style={{ display: 'flex', gap: '10px' }}>
-                  <input type="text" value={dep} onChange={(e) => handleGroupDepChange(index, e.target.value)} maxLength={3} placeholder={`Ex: CDG`} required style={{ flexGrow: 1, padding: '8px' }} />
-                  {groupDepartures.length > 2 && (
-                    <button type="button" onClick={() => removeGroupDeparture(index)} style={{ padding: '8px 12px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>❌</button>
-                  )}
-                </div>
-              ))}
-              {groupDepartures.length < 4 && (
-                <button type="button" onClick={addGroupDeparture} style={{ padding: '8px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', alignSelf: 'flex-start' }}>➕ Ajouter une personne</button>
-              )}
+            <div className={`transition-all duration-700 text-center ${animationState === 'taking_off' ? 'opacity-0 scale-95' : 'opacity-100'}`}>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl mt-28 font-black text-[#262262] tracking-tight leading-tight">
+                Avec Comparat'air...<br />
+                <span className="text-[#262262] opacity-80">seuls les prix restent à terre</span>
+              </h1>
             </div>
-          ) : (
-            <>
-              <div>
-                <label>Aéroport de départ :</label>
-                <input type="text" value={soloDeparture} onChange={(e) => setSoloDeparture(e.target.value.toUpperCase())} maxLength={3} required style={{ width: '100%', padding: '8px' }} />
-              </div>
-              <div>
-                <label>Passagers :</label>
-                <input type="number" value={passengers} onChange={(e) => setPassengers(e.target.value)} min="1" max="9" required style={{ width: '100%', padding: '8px' }} />
-              </div>
-            </>
-          )}
 
-          <div>
-            <label>Date de départ :</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
-          </div>
+            <div className={`relative w-full max-w-6xl mx-auto transition-all duration-[800ms] ease-in-out ${animationState === 'taking_off' ? 'translate-x-[150vw] -translate-y-48 scale-75 opacity-0' : 'translate-x-0 opacity-100'}`}>
+              <img src="/plane.png" alt="Comparat'air Plane" className="w-full h-auto object-contain drop-shadow-xl pointer-events-none" />
 
-          <div>
-            <label>{isGroupMode ? "Budget Total Max (€) :" : "Prix maximum (€) :"}</label>
-            <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} min="10" required style={{ width: '100%', padding: '8px' }} />
-          </div>
-
-          <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-            <input type="checkbox" id="directCheck" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
-            <label htmlFor="directCheck" style={{ fontWeight: 'bold', cursor: 'pointer', color: '#333' }}>Vols directs uniquement ✈️</label>
-          </div>
-          
-          <button type="submit" disabled={isLoading} style={{ gridColumn: 'span 2', padding: '12px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: isLoading ? 'not-allowed' : 'pointer', fontSize: '16px' }}>
-            {isLoading ? "Recherche en cours..." : "Rechercher les vols"}
-          </button>
-        </form>
-      </div>
-
-      <div style={{ marginTop: '40px' }}>
-        {isLoading && <p style={{ textAlign: 'center' }}>Veuillez patienter, interrogation des compagnies aériennes...</p>}
-
-        {!isLoading && results.length > 0 && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0 }}>Résultats trouvés ({isGroupMode ? results.length + " destinations possibles" : results.length + " vols"}) :</h3>
-              
-              {!isGroupMode && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <label style={{ fontWeight: 'bold', color: '#555', fontSize: '14px' }}>Trier par :</label>
-                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '8px 12px', borderRadius: '5px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer', outline: 'none' }}>
-                    <option value="price_asc">Prix : Moins cher en premier</option>
-                    <option value="price_desc">Prix : Plus cher en premier</option>
-                    <option value="eco_asc">Éco : Moins polluant en premier</option>
-                    <option value="eco_desc">Éco : Plus polluant en premier</option>
-                  </select>
+              <form onSubmit={handleSearch} className="absolute top-[55%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex justify-center items-center gap-2 md:gap-3 w-full px-12 md:px-32">
+                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md flex-1 max-w-[150px]">
+                  <span className="text-[#9ca3af] font-medium text-[10px] md:text-sm italic mr-1 md:mr-2">From...</span>
+                  <input type="text" value={soloDeparture} onChange={(e) => setSoloDeparture(e.target.value.toUpperCase())} className="w-full bg-transparent outline-none text-[#262262] font-black uppercase text-center text-xs md:text-base" maxLength={3} placeholder="CDG" required />
                 </div>
-              )}
+                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md flex-1 max-w-[150px]">
+                  <span className="text-[#9ca3af] font-medium text-[10px] md:text-sm italic mr-1 md:mr-2">Prix max...</span>
+                  <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} className="w-full bg-transparent outline-none text-[#262262] font-black text-center text-xs md:text-base" min="10" placeholder="500" required />
+                </div>
+                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md w-auto">
+                  <input type="number" value={passengers} onChange={(e) => setPassengers(e.target.value)} className="w-6 md:w-8 bg-transparent outline-none text-[#262262] font-black text-center text-xs md:text-base" min="1" max="9" required />
+                  <img src="/nbr.png" alt="Passagers" className="h-3 w-3 md:h-4 md:w-4 object-contain ml-1" />
+                </div>
+                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md flex-1 max-w-[180px]">
+                  <img src="/calendrier.png" alt="Calendrier" className="h-3 w-3 md:h-4 md:w-4 object-contain ml-1" />
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-transparent outline-none text-[#262262] font-bold text-[10px] md:text-sm" required />
+                </div>
+                <button type="submit" disabled={isLoading} className="bg-[#6b66c7] hover:bg-[#837ed9] text-white p-2.5 md:p-4 rounded-xl md:rounded-2xl shadow-md transition-colors flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </button>
+              </form>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              
-              {/* AFFICHAGE MODE GROUPE */}
-              {isGroupMode && results.map((combo, index) => (
-                <div key={index} style={{ border: '2px solid #28a745', borderRadius: '8px', overflow: 'hidden' }}>
-                  <div style={{ backgroundColor: '#d4edda', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: '18px', color: '#155724' }}>
-                    <span>📍 Point de rencontre : {combo.destination}</span>
-                    <span>Total pour {combo.flights.length} : {combo.total_price} €</span>
-                  </div>
-                  <div style={{ padding: '15px', backgroundColor: '#fdfdfd' }}>
-                    {/* On boucle sur les vols de la combinaison ! */}
-                    {combo.flights.map((flight, flightIndex) => (
-                      <div key={flightIndex}>
-                        <h5 style={{ margin: '15px 0 5px 0', color: '#007bff' }}>Vol de la Personne {flightIndex + 1} ({flight.depart})</h5>
-                        <FlightCard flight={flight} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
 
-              {/* AFFICHAGE MODE SOLO */}
-              {!isGroupMode && Object.entries(groupedSoloResults).map(([destination, flights]) => (
-                <div key={destination} style={{ border: '1px solid #007bff', borderRadius: '8px', overflow: 'hidden' }}>
-                  <div onClick={() => toggleGroup(destination)} style={{ backgroundColor: '#e6f2ff', padding: '15px 20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: '18px', color: '#0056b3' }}>
-                    <span>✈️ Vers {destination} <span style={{fontSize: '14px', color: '#666'}}>({flights.length} options)</span></span>
-                    <span>{expandedGroups[destination] ? '🔼' : '🔽'}</span>
-                  </div>
-                  {expandedGroups[destination] && (
-                    <div style={{ padding: '15px', backgroundColor: '#fdfdfd', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {flights.map((flight) => (
-                        <FlightCard key={flight.id} flight={flight} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-
+            <div className={`mt-4 z-20 relative transition-opacity duration-500 ${animationState === 'taking_off' ? 'opacity-0' : 'opacity-100'}`}>
+              <label className="flex items-center gap-3 cursor-pointer text-[#262262] font-bold text-sm bg-white shadow-sm px-6 py-3 rounded-full border border-slate-200 hover:bg-slate-50 transition-colors">
+                <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} className="w-4 h-4 accent-[#262262] rounded" />
+                Ligne directe uniquement
+              </label>
             </div>
           </div>
         )}
 
-        {!isLoading && results.length === 0 && date !== '' && (
-          <p style={{ textAlign: 'center', color: '#666' }}>Aucune combinaison trouvée sous ce budget pour cette date.</p>
+        {(animationState === 'searching' || animationState === 'landed') && (
+          <div className="w-full animate-[flyIn_0.5s_ease-out_forwards] flex flex-col items-start pb-20">
+
+            <div className=" mt-28 ml-4 p-4 md:p-6 md:pr-8 flex flex-col lg:flex-row items-start lg:items-center gap-6 mb-10 w-full lg:w-auto">
+              <div className="flex items-center gap-4 md:gap-6">
+                <img src="/plane.png" alt="Mini avion" className="w-24 md:w-32 object-contain drop-shadow-md" />
+                <div>
+                  <h2 className="text-xl md:text-2xl font-black text-[#262262]">Vol depuis {soloDeparture}</h2>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">📅 {date}</span>
+                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">👤 {passengers} Passager(s)</span>
+                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">Max {maxPrice}€</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full lg:w-auto border-t lg:border-t-0 lg:border-l border-slate-200 pt-4 lg:pt-0 lg:pl-8 flex justify-center lg:block">
+                {animationState === 'searching' ? (
+                  <div className="flex items-center gap-3 text-[#6b66c7] font-bold">
+                    <div className="w-6 h-6 border-4 border-[#6b66c7] border-t-transparent rounded-full animate-spin"></div>
+                    Recherche en cours...
+                  </div>
+                ) : (
+                  <button onClick={resetSearch} className="text-[#6b66c7] bg-[#f0f0f5] px-6 py-3 rounded-xl font-bold transition-colors whitespace-nowrap">
+                    Nouvelle recherche
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {animationState === 'landed' && (
+              <div className="w-full animate-[fadeIn_0.5s_ease-out_forwards]">
+                {Object.keys(groupedResults).length === 0 ? (
+                  <div className="text-center p-12 bg-white rounded-3xl shadow-sm w-full max-w-4xl mx-auto">
+                    <h3 className="text-2xl font-black text-[#262262]">❌ Aucun vol trouvé pour ces critères.</h3>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full pr-6">
+                    {Object.entries(groupedResults).map(([destination, flights]) => (
+                      <div key={destination} className="bg-[#262262] rounded-3xl shadow-sm border border-slate-200 overflow-hidden w-full">
+
+                        <div
+                          onClick={() => setExpandedDest(expandedDest === destination ? null : destination)}
+                          className="p-6 md:p-8 cursor-pointer flex justify-between items-center hover:bg-[#322d7a] transition-colors group"
+                        >
+                          <div className="flex items-center gap-4 md:gap-6">
+                            <div className="text-3xl md:text-4xl bg-white/10 p-3 md:p-4 rounded-2xl group-hover:scale-110 transition-transform">🌍</div>
+                            <div>
+                              <h3 className="text-xl md:text-2xl font-black text-white">{destination}</h3>
+                              <p className="text-[#a5a2d1] font-bold mt-1 text-sm md:text-base">✈️ {flights.length} vol(s) trouvé(s)</p>
+                            </div>
+                          </div>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 md:h-8 md:w-8 text-white transition-transform duration-300 ${expandedDest === destination ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+
+                        <div className={`transition-all duration-500 ease-in-out bg-[#f9f9fa] ${expandedDest === destination ? 'max-h-[5000px] opacity-100 p-4 md:p-6' : 'max-h-0 opacity-0 overflow-hidden p-0'}`}>
+                          <div className="flex justify-end mb-4">
+                            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-white text-[#262262] font-bold py-2 px-4 rounded-lg border border-slate-200 outline-none shadow-sm cursor-pointer">
+                              <option value="price_asc">Le moins cher</option>
+                              <option value="price_desc">Le plus cher</option>
+                              <option value="eco_asc">Éco-responsable</option>
+                            </select>
+                          </div>
+
+                          <div className="flex flex-col gap-3">
+                            {sortFlights(flights).map((flight) => {
+                              const flightSignature = getFlightSignature(flight.depart, flight.arrivee, flight.horaire_depart);
+                              
+                              return (
+                                <div key={flight.id} className="bg-white rounded-2xl p-4 shadow-lg border border-slate-100 flex flex-col xl:flex-row justify-between items-center hover:bg-slate-50 transition-colors gap-6 xl:gap-4">
+
+                                  <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
+                                    <img src={flight.airline_logo || '/plane.png'} alt="Airline" className="max-w-full max-h-full object-contain" />
+                                  </div>
+
+                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+                                  <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[120px]">
+                                    <h4 className="text-xl font-black text-[#262262] leading-tight">{destination.split(' ')[0]}</h4>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">
+                                      {flight.depart} - {destination}
+                                    </span>
+                                  </div>
+
+                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+                                  <div className="text-xl md:text-2xl font-black text-[#262262] text-center min-w-[160px]">
+                                    {extractTime(flight.horaire_depart)} - <br className="xl:hidden" />
+                                    {extractTime(flight.horaire_arrivee)}
+                                  </div>
+
+                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+                                  <div className="flex flex-col items-center justify-center min-w-[70px]">
+                                    <img src={getEcoImage(flight.emissions_diff)} alt="Eco" className="w-8 h-8 object-contain mb-1" />
+                                    <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
+                                      {flight.emissions_diff ? `${flight.emissions_diff} %` : "N/A"}
+                                    </span>
+                                  </div>
+
+                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+                                  <div className="flex items-center gap-4 min-w-[140px]">
+                                    <div className="flex flex-col items-center justify-center">
+                                      <span className="text-3xl font-black text-[#262262]">{flight.prix}€</span>
+                                      <div className="relative w-full max-w-[70px] h-1.5 rounded-full mt-1 flex bg-slate-100 overflow-hidden shadow-inner">
+                                        <div className="bg-[#4ade80] h-full w-1/3"></div>
+                                        <div className="bg-[#fbbf24] h-full w-1/3"></div>
+                                        <div className="bg-[#f87171] h-full w-1/3"></div>
+                                        <div className="absolute top-0 h-full w-1.5 bg-[#262262] rounded-full" style={{ left: '30%' }}></div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+                                  <button 
+                                    onClick={() => handleLike(flight)} 
+                                    className="hover:scale-110 transition-transform flex items-center justify-center min-w-[40px]"
+                                    disabled={likedFlights.has(flightSignature)}
+                                  >
+                                    <img 
+                                      src={likedFlights.has(flightSignature) ? "/liked.png" : "/notlike.png"} 
+                                      alt="Like" 
+                                      className="w-6 h-6 md:w-8 md:h-8 object-contain" 
+                                    />
+                                  </button>
+
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

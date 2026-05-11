@@ -10,6 +10,7 @@ class FlightLikeRequest(BaseModel):
     jour: str
     prix: float
     passagers: int
+    eco_percent: int = 0
 
 
 class FlightSearchRequest(BaseModel):
