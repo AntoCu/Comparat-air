@@ -11,9 +11,7 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 # Sécurité JWT (Sécurisé : on retire le fallback dangereux)
 SECRET_KEY = os.environ["SECRET_KEY"]
-ALGORITHM = os.getenv(
-    "ALGORITHM", "HS256"
-)  
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 RAPIDAPI_KEY = os.environ["RAPIDAPI_KEY"]

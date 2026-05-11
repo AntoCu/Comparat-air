@@ -2,14 +2,17 @@ import smtplib
 from email.message import EmailMessage
 from src.internal.config import MAIL_USER, MAIL_PASSWORD
 
-def send_price_drop_email(user_email: str, depart: str, arrivee: str, old_price: float, new_price: float):
+
+def send_price_drop_email(
+    user_email: str, depart: str, arrivee: str, old_price: float, new_price: float
+):
     if not MAIL_USER or not MAIL_PASSWORD:
         print(" E-mail non envoyé : Identifiants MAIL manquants")
         return
 
     sujet = f" Alerte SkyStream : Baisse de prix pour votre vol vers {arrivee} !"
     economie = round(old_price - new_price, 2)
-    
+
     contenu_html = f"""
     <html>
         <body style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
@@ -29,11 +32,11 @@ def send_price_drop_email(user_email: str, depart: str, arrivee: str, old_price:
     """
 
     msg = EmailMessage()
-    msg['Subject'] = sujet
-    msg['From'] = f"SkyStream Tracker <{MAIL_USER}>"
-    msg['To'] = user_email
+    msg["Subject"] = sujet
+    msg["From"] = f"SkyStream Tracker <{MAIL_USER}>"
+    msg["To"] = user_email
     msg.set_content("Veuillez activer le HTML pour voir cet e-mail.")
-    msg.add_alternative(contenu_html, subtype='html')
+    msg.add_alternative(contenu_html, subtype="html")
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:

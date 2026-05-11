@@ -95,6 +95,7 @@ async def search_group_flights(search: GroupFlightSearchRequest):
     all_combinations = sorted(all_combinations, key=lambda x: x["total_price"])
     return {"results": all_combinations}
 
+
 @router.post("/like")
 async def add_like(like: FlightLikeRequest):
     conn = None
@@ -110,17 +111,24 @@ async def add_like(like: FlightLikeRequest):
             DO NOTHING
             RETURNING id;
         """,
-            (signature, like.depart, like.arrivee, like.jour, like.passagers, like.eco_percent),
+            (
+                signature,
+                like.depart,
+                like.arrivee,
+                like.jour,
+                like.passagers,
+                like.eco_percent,
+            ),
         )
 
         result = cursor.fetchone()
-        
+
         if result:
             tracked_flight_id = result[0]
         else:
             cursor.execute(
                 'SELECT id FROM "Tracked_Flights" WHERE flight_id = %s AND passengers_nbr = %s',
-                (signature, like.passagers)
+                (signature, like.passagers),
             )
             tracked_flight_id = cursor.fetchone()[0]
 
@@ -129,15 +137,15 @@ async def add_like(like: FlightLikeRequest):
             'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
             (tracked_flight_id, like.prix),
         )
-        
+
         cursor.execute(
             'INSERT INTO "Likes" (user_id, tracked_flight_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;',
             (like.user_id, tracked_flight_id),
         )
-        
+
         conn.commit()
         return {"message": "Vol ajouté aux favoris avec succès"}
-        
+
     except Exception as e:
         print(f"Erreur lors du like : {e}")
         if conn:
@@ -255,7 +263,7 @@ def get_logs(request: Request):
 
 
 @router.post("/refresh-likes/{user_id}")
-async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks): 
+async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
@@ -277,7 +285,7 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
             (user_id,),
         )
         liked_flights = cursor.fetchall()
-        
+
         if not liked_flights:
             return {"message": "Aucun vol à rafraîchir."}
 
@@ -308,7 +316,7 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
                         ).get("topFlights", []) + response.json().get("data", {}).get(
                             "itineraries", {}
                         ).get("otherFlights", [])
-                        
+
                         if flights_list:
                             min_price = min(
                                 (
@@ -318,7 +326,7 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
                                 )
                                 for opt in flights_list
                             )
-                            
+
                             cursor.execute(
                                 'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
                                 (flight["tracked_flight_id"], min_price),
@@ -327,25 +335,29 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
 
                             old_price = flight["old_price"]
                             if old_price is not None and min_price < old_price:
-                                print(f"Baisse détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€")
-                                
+                                print(
+                                    f"Baisse détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
+                                )
+
                                 background_tasks.add_task(
                                     send_price_drop_email,
                                     user_email=flight["user_email"],
                                     depart=flight["depart"],
                                     arrivee=flight["arrivee"],
                                     old_price=float(old_price),
-                                    new_price=float(min_price)
+                                    new_price=float(min_price),
                                 )
 
                 except Exception as e:
                     print(f"Erreur avec l'API Flights : {e}")
                     pass
-                
-                await asyncio.sleep(1) 
-                
+
+                await asyncio.sleep(1)
+
         conn.commit()
-        return {"message": f"Mise à jour terminée ! {updates} prix actualisés. Les alertes mail sont parties si besoin."}
+        return {
+            "message": f"Mise à jour terminée ! {updates} prix actualisés. Les alertes mail sont parties si besoin."
+        }
     except Exception as e:
         conn.rollback()
         print(f"Erreur SQL Refresh : {e}")
@@ -354,13 +366,17 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
         cursor.close()
         conn.close()
 
+
 @router.post("/search-destination")
 @limiter.limit("20 per minute")
 def search_destination(request: SearchRequest, request_obj: Request):
     return {"cleaned_query": sanitize_input(request.query)}
 
+
 @router.get("/cron/refresh-prices")
-async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authorization: str = Header(None)):
+async def auto_refresh_flight_prices(
+    background_tasks: BackgroundTasks, authorization: str = Header(None)
+):
     """Route appelée uniquement par Vercel pour mettre à jour les prix et alerter les utilisateurs"""
 
     if authorization != f"Bearer {CRON_SECRET}":
@@ -390,7 +406,7 @@ async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authoriz
 
         updates = 0
         mails_sent = 0
-        
+
         async with httpx.AsyncClient() as client:
             for flight in tracked_flights:
                 url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
@@ -411,8 +427,12 @@ async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authoriz
                         url, headers=headers, params=querystring, timeout=15.0
                     )
                     if response.status_code == 200:
-                        itineraries = response.json().get("data", {}).get("itineraries", {})
-                        flights_list = itineraries.get("topFlights", []) + itineraries.get("otherFlights", [])
+                        itineraries = (
+                            response.json().get("data", {}).get("itineraries", {})
+                        )
+                        flights_list = itineraries.get(
+                            "topFlights", []
+                        ) + itineraries.get("otherFlights", [])
 
                         if flights_list:
                             min_price = min(
@@ -423,7 +443,7 @@ async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authoriz
                                 )
                                 for opt in flights_list
                             )
-                            
+
                             cursor.execute(
                                 'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
                                 (flight["id"], min_price),
@@ -432,8 +452,10 @@ async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authoriz
 
                             old_price = flight["old_price"]
                             if old_price is not None and min_price < old_price:
-                                print(f"[CRON] Baisse globale détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€")
-                                
+                                print(
+                                    f"[CRON] Baisse globale détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
+                                )
+
                                 cursor.execute(
                                     """
                                     SELECT u.email 
@@ -441,7 +463,7 @@ async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authoriz
                                     JOIN "Users" u ON l.user_id = u.id
                                     WHERE l.tracked_flight_id = %s
                                     """,
-                                    (flight["id"],)
+                                    (flight["id"],),
                                 )
                                 users_to_notify = cursor.fetchall()
 
@@ -452,7 +474,7 @@ async def auto_refresh_flight_prices(background_tasks: BackgroundTasks, authoriz
                                         depart=flight["depart"],
                                         arrivee=flight["arrivee"],
                                         old_price=float(old_price),
-                                        new_price=float(min_price)
+                                        new_price=float(min_price),
                                     )
                                     mails_sent += 1
 
