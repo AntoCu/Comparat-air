@@ -33,7 +33,7 @@ export default function LoginPage({ setIsLoggedIn, setUserEmail, setUserName }) 
         setErrorMessage(data.detail || "Erreur de connexion.");
       }
     } catch (error) {
-      setErrorMessage("Impossible de joindre l'API");
+      setErrorMessage(error,"Impossible de joindre l'API");
     }
   };
 

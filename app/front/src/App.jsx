@@ -13,7 +13,7 @@ import LikesPage from './pages/likes-page';
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
   const [userEmail, setUserEmail] = useState(localStorage.getItem('email') || '');
-  const [userName, setUserName] = useState(localStorage.getItem('name') || ''); 
+  const [setUserName] = useState(localStorage.getItem('name') || ''); 
   
   const handleLogout = () => {
     localStorage.clear();
