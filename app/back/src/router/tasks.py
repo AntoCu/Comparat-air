@@ -42,14 +42,14 @@ async def fetch_airport(
 
                 if price <= search.max_price:
                     segments = option.get("flights") or []
-                    arrivee_nom, depart_code = dest, search.departure
-
+                    arrivee_code, depart_code = dest, search.departure
+                    airline_logo_url = ""
                     if segments:
                         if isinstance(segments[-1], dict):
-                            arrivee_nom = (
+                            arrivee_code = (
                                 segments[-1]
                                 .get("arrival_airport", {})
-                                .get("airport_name", dest)
+                                .get("airport_code", dest)
                             )
                         if isinstance(segments[0], dict):
                             depart_code = (
@@ -57,6 +57,7 @@ async def fetch_airport(
                                 .get("departure_airport", {})
                                 .get("airport_code", search.departure)
                             )
+                            airline_logo_url = segments[0].get("airline_logo", "")
 
                     carbon = option.get("carbon_emissions")
                     co2_kg, diff_percent, is_higher = 0, 0, False
@@ -74,7 +75,7 @@ async def fetch_airport(
                         {
                             "id": option.get("booking_token", secrets.token_hex(6)),
                             "depart": depart_code,
-                            "arrivee": arrivee_nom,
+                            "arrivee": arrivee_code,
                             "horaire_depart": option.get("departure_time", "N/A"),
                             "horaire_arrivee": option.get("arrival_time", "N/A"),
                             "prix": price,
@@ -82,6 +83,7 @@ async def fetch_airport(
                             "emissions_co2": co2_kg,
                             "emissions_diff": diff_percent,
                             "emissions_higher": is_higher,
+                            "airline_logo": airline_logo_url,
                         }
                     )
             return dest_flights

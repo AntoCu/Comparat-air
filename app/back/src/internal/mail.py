@@ -1,10 +1,10 @@
 import smtplib
 from email.message import EmailMessage
-from config import MAIL_USER, MAIL_PASSWORD
+from src.internal.config import MAIL_USER, MAIL_PASSWORD
 
 def send_price_drop_email(user_email: str, depart: str, arrivee: str, old_price: float, new_price: float):
     if not MAIL_USER or not MAIL_PASSWORD:
-        print("⚠️ E-mail non envoyé : Identifiants MAIL manquants")
+        print(" E-mail non envoyé : Identifiants MAIL manquants")
         return
 
     sujet = f" Alerte SkyStream : Baisse de prix pour votre vol vers {arrivee} !"
@@ -21,7 +21,7 @@ def send_price_drop_email(user_email: str, depart: str, arrivee: str, old_price:
                 <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <p style="margin: 0; color: #64748b; text-decoration: line-through;">Ancien prix : {old_price} €</p>
                     <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: bold; color: #10b981;">Nouveau prix : {new_price} €</p>
-                    <p style="margin: 5px 0 0 0; font-weight: bold; color: #0ea5e9;">Vous économisez {economie} € ! 🎉</p>
+                    <p style="margin: 5px 0 0 0; font-weight: bold; color: #0ea5e9;">Vous économisez {economie} € ! </p>
                 </div>
             </div>
         </body>

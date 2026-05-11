@@ -95,41 +95,51 @@ async def search_group_flights(search: GroupFlightSearchRequest):
     all_combinations = sorted(all_combinations, key=lambda x: x["total_price"])
     return {"results": all_combinations}
 
-
 @router.post("/like")
 async def add_like(like: FlightLikeRequest):
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-
+        signature = f"{like.depart}-{like.arrivee}-{like.jour}"
         cursor.execute(
             """
-            INSERT INTO "Tracked_Flights" (flight_id, "from", dest, day, passengers_nbr)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO "Tracked_Flights" (flight_id, "from", dest, day, passengers_nbr,eco_percent)
+            VALUES (%s, %s, %s, %s, %s,%s)
             ON CONFLICT ("flight_id", "passengers_nbr") 
-            DO UPDATE SET flight_id = EXCLUDED.flight_id
+            DO NOTHING
             RETURNING id;
         """,
-            (like.flight_id, like.depart, like.arrivee, like.jour, like.passagers),
+            (signature, like.depart, like.arrivee, like.jour, like.passagers, like.eco_percent),
         )
 
-        tracked_flight_id = cursor.fetchone()[0]
+        result = cursor.fetchone()
+        
+        if result:
+            tracked_flight_id = result[0]
+        else:
+            cursor.execute(
+                'SELECT id FROM "Tracked_Flights" WHERE flight_id = %s AND passengers_nbr = %s',
+                (signature, like.passagers)
+            )
+            tracked_flight_id = cursor.fetchone()[0]
 
+        # On ajoute le prix actuel à l'historique des prix
         cursor.execute(
             'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
             (tracked_flight_id, like.prix),
         )
+        
         cursor.execute(
             'INSERT INTO "Likes" (user_id, tracked_flight_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;',
             (like.user_id, tracked_flight_id),
         )
+        
         conn.commit()
-
-        if cursor.rowcount == 0:
-            return {"message": "Ce vol est déjà dans tes favoris !"}
         return {"message": "Vol ajouté aux favoris avec succès"}
-    except Exception:
+        
+    except Exception as e:
+        print(f"Erreur lors du like : {e}")
         if conn:
             conn.rollback()
         return {"error": "Impossible d'ajouter ce vol aux favoris"}
@@ -180,7 +190,7 @@ def get_user_likes(user_id: int):
     try:
         cursor.execute(
             """
-            SELECT tf.id, tf.flight_id, tf."from" as depart, tf.dest as arrivee, tf.day as jour, tf.passengers_nbr as passagers,
+            SELECT tf.id, tf.flight_id, tf."from" as depart, tf.dest as arrivee, tf.day as jour, tf.passengers_nbr as passagers, tf.eco_percent,
                    (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = tf.id ORDER BY id DESC LIMIT 1) as prix
             FROM "Likes" l JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id
             WHERE l.user_id = %s ORDER BY l.id DESC;
