@@ -73,7 +73,7 @@ export default function ProfilePage({ setIsLoggedIn }) {
         setMessage({ text: data.detail || "Erreur lors de la modification.", type: "error" });
       }
     } catch (error) {
-      setMessage({ text: "Impossible de joindre le serveur.", type: "error" });
+      setMessage({ error: "Impossible de joindre le serveur.", type: "error" });
     }
   };
 

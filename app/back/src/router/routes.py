@@ -307,7 +307,7 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
                             )
                     else:
                         api_date = raw_date
-                except:
+                except Exception:
                     api_date = flight["jour"]
 
                 url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
@@ -437,7 +437,7 @@ async def auto_refresh_flight_prices(
                             )
                     else:
                         api_date = raw_date
-                except:
+                except Exception:
                     api_date = flight["jour"]
 
                 url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
@@ -556,7 +556,7 @@ def change_password(req: ChangePasswordRequest):
         return {"message": "Mot de passe modifié avec succès !"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         conn.rollback()
         raise HTTPException(status_code=500, detail="Erreur lors de la mise à jour.")
     finally:
