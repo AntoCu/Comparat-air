@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Header, Request, BackgroundTasks
 from psycopg2.extras import RealDictCursor
 
 from src.models import (
+    ChangePasswordRequest,
     FlightSearchRequest,
     FlightLikeRequest,
     GroupFlightSearchRequest,
@@ -292,16 +293,31 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
         updates = 0
         async with httpx.AsyncClient() as client:
             for flight in liked_flights:
-                url, querystring = (
-                    "https://google-flights2.p.rapidapi.com/api/v1/searchFlights",
-                    {
-                        "departure_id": flight["depart"],
-                        "arrival_id": flight["arrivee"],
-                        "outbound_date": flight["jour"],
-                        "adults": flight["passagers"],
-                        "currency": "EUR",
-                    },
-                )
+                try:
+                    raw_date = flight["jour"].split("|")[0].split(" ")[0]
+                    parts = raw_date.split("-")
+                    if len(parts) == 3:
+                        if len(parts[0]) == 4:
+                            api_date = (
+                                f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+                            )
+                        else:
+                            api_date = (
+                                f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                            )
+                    else:
+                        api_date = raw_date
+                except Exception:
+                    api_date = flight["jour"]
+
+                url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
+                querystring = {
+                    "departure_id": flight["depart"],
+                    "arrival_id": flight["arrivee"],
+                    "outbound_date": api_date,
+                    "adults": flight["passagers"],
+                    "currency": "EUR",
+                }
                 headers = {
                     "X-RapidAPI-Key": RAPIDAPI_KEY,
                     "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
@@ -334,9 +350,10 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
                             updates += 1
 
                             old_price = flight["old_price"]
-                            if old_price is not None and min_price < old_price:
+                            if old_price is not None and min_price != old_price:
+                                action = "Baisse" if min_price < old_price else "Hausse"
                                 print(
-                                    f"Baisse détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
+                                    f"{action} détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
                                 )
 
                                 background_tasks.add_task(
@@ -350,7 +367,6 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
 
                 except Exception as e:
                     print(f"Erreur avec l'API Flights : {e}")
-                    pass
 
                 await asyncio.sleep(1)
 
@@ -377,8 +393,6 @@ def search_destination(request: SearchRequest, request_obj: Request):
 async def auto_refresh_flight_prices(
     background_tasks: BackgroundTasks, authorization: str = Header(None)
 ):
-    """Route appelée uniquement par Vercel pour mettre à jour les prix et alerter les utilisateurs"""
-
     if authorization != f"Bearer {CRON_SECRET}":
         raise HTTPException(status_code=401, detail="Accès refusé. Mauvais token.")
 
@@ -409,11 +423,28 @@ async def auto_refresh_flight_prices(
 
         async with httpx.AsyncClient() as client:
             for flight in tracked_flights:
+                try:
+                    raw_date = flight["jour"].split("|")[0].split(" ")[0]
+                    parts = raw_date.split("-")
+                    if len(parts) == 3:
+                        if len(parts[0]) == 4:
+                            api_date = (
+                                f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+                            )
+                        else:
+                            api_date = (
+                                f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                            )
+                    else:
+                        api_date = raw_date
+                except Exception:
+                    api_date = flight["jour"]
+
                 url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
                 querystring = {
                     "departure_id": flight["depart"],
                     "arrival_id": flight["arrivee"],
-                    "outbound_date": flight["jour"],
+                    "outbound_date": api_date,
                     "adults": flight["passagers"],
                     "currency": "EUR",
                 }
@@ -451,9 +482,10 @@ async def auto_refresh_flight_prices(
                             updates += 1
 
                             old_price = flight["old_price"]
-                            if old_price is not None and min_price < old_price:
+                            if old_price is not None and min_price != old_price:
+                                action = "Baisse" if min_price < old_price else "Hausse"
                                 print(
-                                    f"[CRON] Baisse globale détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
+                                    f"[CRON] {action} globale détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
                                 )
 
                                 cursor.execute(
@@ -494,3 +526,39 @@ async def auto_refresh_flight_prices(
         if conn:
             cursor.close()
             conn.close()
+
+
+@router.post("/change-password")
+def change_password(req: ChangePasswordRequest):
+    if not is_password_strong(req.new_password):
+        raise HTTPException(
+            status_code=400,
+            detail="Le nouveau mot de passe est trop faible (maj, min, chiffre, car. spécial requis).",
+        )
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cursor.execute('SELECT password FROM "Users" WHERE id = %s', (req.user_id,))
+        user = cursor.fetchone()
+
+        if not user or not verify_password(req.old_password, user["password"]):
+            raise HTTPException(
+                status_code=400, detail="Ancien mot de passe incorrect."
+            )
+
+        hashed_new = hash_password(req.new_password)
+        cursor.execute(
+            'UPDATE "Users" SET password = %s WHERE id = %s', (hashed_new, req.user_id)
+        )
+        conn.commit()
+
+        return {"message": "Mot de passe modifié avec succès !"}
+    except HTTPException:
+        raise
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Erreur lors de la mise à jour.")
+    finally:
+        cursor.close()
+        conn.close()

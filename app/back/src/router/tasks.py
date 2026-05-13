@@ -39,6 +39,10 @@ async def fetch_airport(
                 price = option.get("price", 9999)
                 if isinstance(price, dict):
                     price = price.get("raw", 9999)
+                try:
+                    price = float(price)
+                except (ValueError, TypeError):
+                    price = 9999.0
 
                 if price <= search.max_price:
                     segments = option.get("flights") or []

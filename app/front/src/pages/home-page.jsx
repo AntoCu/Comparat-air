@@ -20,10 +20,10 @@ export default function HomePage() {
     return `${depart}-${arrivee}-${horaire}`;
   };
 
-  useEffect(() => { 
+  useEffect(() => {
     const fetchUserLikes = async () => {
       const userId = localStorage.getItem("user_id");
-      if (!userId) return; 
+      if (!userId) return;
 
       try {
         const response = await fetch(`http://127.0.0.1:8000/likes/${userId}`);
@@ -85,7 +85,7 @@ export default function HomePage() {
     const payload = {
       user_id: Number(idUtilisateurActuel), flight_id: String(flight.id),
       depart: String(flight.depart), arrivee: String(flight.arrivee),
-      jour: `${flight.horaire_depart}|${flight.horaire_arrivee}`, prix: Number(flight.prix), passagers: Number(passengers), eco_percent: flight.emissions_diff 
+      jour: `${flight.horaire_depart}|${flight.horaire_arrivee}`, prix: Number(flight.prix), passagers: Number(passengers), eco_percent: flight.emissions_diff
     };
 
     try {
@@ -131,8 +131,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen w-full font-sans flex flex-col overflow-x-hidden relative bg-[#f9f9fa]">
-      
-      <div 
+
+      <div
         className="fixed inset-0 z-0 blur-[4px] scale-105"
         style={{
           backgroundImage: 'url("/background.avif")',
@@ -142,7 +142,7 @@ export default function HomePage() {
       ></div>
 
       <div className="relative z-10 w-full flex flex-col flex-1">
-        
+
         {(animationState === 'idle' || animationState === 'taking_off') && (
           <div className="w-full flex flex-col items-center mt-12 px-4">
 
@@ -221,26 +221,41 @@ export default function HomePage() {
             {animationState === 'landed' && (
               <div className="w-full animate-[fadeIn_0.5s_ease-out_forwards]">
                 {Object.keys(groupedResults).length === 0 ? (
-                  <div className="text-center p-12 bg-white rounded-3xl shadow-sm w-full max-w-4xl mx-auto">
+                  <div className="text-center p-12 bg-white/95 backdrop-blur-sm rounded-3xl shadow-sm w-full max-w-4xl mx-auto border border-slate-200">
                     <h3 className="text-2xl font-black text-[#262262]">❌ Aucun vol trouvé pour ces critères.</h3>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full pr-6">
+                  <div className="grid ml-6 grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full pr-6">
                     {Object.entries(groupedResults).map(([destination, flights]) => (
-                      <div key={destination} className="bg-[#262262] rounded-3xl shadow-sm border border-slate-200 overflow-hidden w-full">
+
+                      <div key={destination} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden w-full">
 
                         <div
                           onClick={() => setExpandedDest(expandedDest === destination ? null : destination)}
-                          className="p-6 md:p-8 cursor-pointer flex justify-between items-center hover:bg-[#322d7a] transition-colors group"
+                          className="px-6 py-4 md:px-8 md:py-6 cursor-pointer flex justify-between items-center transition-colors group bg-[#dce0fc] hover:bg-[#cdd2fb]"
                         >
-                          <div className="flex items-center gap-4 md:gap-6">
-                            <div className="text-3xl md:text-4xl bg-white/10 p-3 md:p-4 rounded-2xl group-hover:scale-110 transition-transform">🌍</div>
-                            <div>
-                              <h3 className="text-xl md:text-2xl font-black text-white">{destination}</h3>
-                              <p className="text-[#a5a2d1] font-bold mt-1 text-sm md:text-base">✈️ {flights.length} vol(s) trouvé(s)</p>
+                          <div className="flex items-center gap-4 md:gap-10 w-full">
+
+                            <div className="w-14 h-20 md:w-16 md:h-24 flex-shrink-0 rounded-[2rem] bg-transparent flex items-center justify-center border-[3px] border-[#c0c6f9] shadow-sm text-[#262262]">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>                            </div>
+
+                            <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-16">
+                              <div>
+                0                <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{destination.split(' ')[0]}</h3>
+                                <p className="text-[10px] md:text-sm font-bold text-[#262262] uppercase tracking-wider mt-0.5">
+                                  {soloDeparture || 'CDG'} - {destination.substring(0, 3)}
+                                </p>
+                              </div>
+
+                              <div className="text-xl md:text-3xl font-black text-[#262262]">
+                                {flights.length} Vol{flights.length > 1 ? 's' : ''} trouvé{flights.length > 1 ? 's' : ''}
+                              </div>
                             </div>
                           </div>
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 md:h-8 md:w-8 text-white transition-transform duration-300 ${expandedDest === destination ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-10 w-10 md:h-12 md:w-12 text-[#262262] transition-transform duration-300 flex-shrink-0 ${expandedDest === destination ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                           </svg>
                         </div>
@@ -257,9 +272,9 @@ export default function HomePage() {
                           <div className="flex flex-col gap-3">
                             {sortFlights(flights).map((flight) => {
                               const flightSignature = getFlightSignature(flight.depart, flight.arrivee, flight.horaire_depart);
-                              
+
                               return (
-                                <div key={flight.id} className="bg-white rounded-2xl p-4 shadow-lg border border-slate-100 flex flex-col xl:flex-row justify-between items-center hover:bg-slate-50 transition-colors gap-6 xl:gap-4">
+                                <div key={flight.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col xl:flex-row justify-between items-center hover:bg-slate-50 transition-colors gap-6 xl:gap-4">
 
                                   <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
                                     <img src={flight.airline_logo || '/plane.png'} alt="Airline" className="max-w-full max-h-full object-contain" />
@@ -270,7 +285,7 @@ export default function HomePage() {
                                   <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[120px]">
                                     <h4 className="text-xl font-black text-[#262262] leading-tight">{destination.split(' ')[0]}</h4>
                                     <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">
-                                      {flight.depart} - {destination}
+                                      {flight.depart} - {destination.substring(0, 3)}
                                     </span>
                                   </div>
 
@@ -306,15 +321,15 @@ export default function HomePage() {
 
                                   <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
 
-                                  <button 
-                                    onClick={() => handleLike(flight)} 
+                                  <button
+                                    onClick={() => handleLike(flight)}
                                     className="hover:scale-110 transition-transform flex items-center justify-center min-w-[40px]"
                                     disabled={likedFlights.has(flightSignature)}
                                   >
-                                    <img 
-                                      src={likedFlights.has(flightSignature) ? "/liked.png" : "/notlike.png"} 
-                                      alt="Like" 
-                                      className="w-6 h-6 md:w-8 md:h-8 object-contain" 
+                                    <img
+                                      src={likedFlights.has(flightSignature) ? "/liked.png" : "/notlike.png"}
+                                      alt="Like"
+                                      className="w-6 h-6 md:w-8 md:h-8 object-contain"
                                     />
                                   </button>
 
@@ -323,6 +338,7 @@ export default function HomePage() {
                             })}
                           </div>
                         </div>
+
                       </div>
                     ))}
                   </div>

@@ -41,3 +41,9 @@ class GroupFlightSearchRequest(BaseModel):
     date: str
     max_price: float
     is_direct: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    user_id: int
+    old_password: str
+    new_password: str
