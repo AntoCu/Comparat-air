@@ -64,6 +64,11 @@ export default function LikesPage() {
     return match ? match[0] : dateStr;
   };
 
+  const extractDate = (dateStr) => {
+    if (!dateStr) return "";
+    return dateStr.split(' ')[0];
+  };
+
   const getEcoImage = (percent) => {
     if (percent == null || percent <= 10) return '/eco-good.png';
     if (percent <= 75) return '/eco-medium.png';
@@ -129,11 +134,10 @@ export default function LikesPage() {
           )}
         </div>
 
-        {/* Affichage des résultats */}
         {isLoading ? (
           <div className="flex items-center justify-center gap-3 text-[#262262] bg-white/90 backdrop-blur-sm px-6 py-4 rounded-full shadow-md font-bold text-lg max-w-sm mx-auto mt-12">
             <div className="w-6 h-6 border-4 border-[#262262] border-t-transparent rounded-full animate-spin"></div>
-            Chargement de tes pépites...
+            Chargement de tes likes...
           </div>
         ) : likedFlights.length === 0 ? (
           <div className="text-center p-12 bg-white/95 backdrop-blur-sm rounded-3xl shadow-md border border-slate-200">
@@ -144,12 +148,6 @@ export default function LikesPage() {
           <div className="flex flex-col gap-4">
             {likedFlights.map((flight) => (
               <div key={flight.id} className="bg-white rounded-2xl p-4 md:p-5 shadow-lg border border-slate-100 flex flex-col xl:flex-row justify-between items-center hover:bg-slate-50 transition-colors gap-6 xl:gap-4">
-
-                <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center opacity-60">
-                  <img src="/plane.png" alt="Airline" className="max-w-full max-h-full object-contain" />
-                </div>
-
-                <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
 
                 <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[140px]">
                   <h4 className="text-2xl font-black text-[#262262] leading-tight">
@@ -162,13 +160,28 @@ export default function LikesPage() {
 
                 <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
 
-                <div className="text-2xl md:text-3xl font-black text-[#262262] text-center min-w-[160px]">
-                  {extractTime(flight.jour.split('|')[0])}
+                <div className="flex flex-col items-center justify-center min-w-[160px]">
+                  <div className="flex flex-col items-center text-center">
+                    <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider mb-[-2px]">
+                      {extractDate(flight.jour.split('|')[0])}
+                    </span>
+                    <span className="text-2xl md:text-3xl font-black text-[#262262]">
+                      {extractTime(flight.jour.split('|')[0])}
+                    </span>
+                  </div>
 
                   {flight.jour.split('|')[1] && (
                     <>
-                      <span> - </span><br className="xl:hidden" />
-                      {extractTime(flight.jour.split('|')[1])}
+                      <div className="w-1 h-3 bg-slate-200 rounded-full my-1"></div>
+                      
+                      <div className="flex flex-col items-center text-center">
+                        <span className="text-[10px] font-bold text-[#f97316] uppercase tracking-wider mb-[-2px]">
+                          {extractDate(flight.jour.split('|')[1])}
+                        </span>
+                        <span className="text-2xl md:text-3xl font-black text-[#262262]">
+                          {extractTime(flight.jour.split('|')[1])}
+                        </span>
+                      </div>
                     </>
                   )}
                 </div>
