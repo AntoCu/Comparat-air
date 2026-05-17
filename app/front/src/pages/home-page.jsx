@@ -222,7 +222,7 @@ export default function HomePage() {
               <div className="w-full animate-[fadeIn_0.5s_ease-out_forwards]">
                 {Object.keys(groupedResults).length === 0 ? (
                   <div className="text-center p-12 bg-white/95 backdrop-blur-sm rounded-3xl shadow-sm w-full max-w-4xl mx-auto border border-slate-200">
-                    <h3 className="text-2xl font-black text-[#262262]">❌ Aucun vol trouvé pour ces critères.</h3>
+                    <h3 className="text-2xl font-black text-[#262262]"> Aucun vol trouvé pour ces critères.</h3>
                   </div>
                 ) : (
                   <div className="grid ml-6 grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full pr-6">
@@ -243,7 +243,7 @@ export default function HomePage() {
 
                             <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-16">
                               <div>
-                0                <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{destination.split(' ')[0]}</h3>
+                            <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{destination.split(' ')[0]}</h3>
                                 <p className="text-[10px] md:text-sm font-bold text-[#262262] uppercase tracking-wider mt-0.5">
                                   {soloDeparture || 'CDG'} - {destination.substring(0, 3)}
                                 </p>
