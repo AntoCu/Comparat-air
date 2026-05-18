@@ -12,9 +12,9 @@ import LikesPage from './pages/likes-page';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   const [userEmail, setUserEmail] = useState(localStorage.getItem('email') || '');
-const [userName, setUserName] = useState(localStorage.getItem('name') || '');  
+  // eslint-disable-next-line no-unused-vars
+  const [userName, setUserName] = useState(localStorage.getItem('name') || '');  
   const handleLogout = () => {
     localStorage.clear();
     setIsLoggedIn(false);
