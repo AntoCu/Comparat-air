@@ -1,4 +1,4 @@
-# Comparat'air Tracker
+# Comparat'air
 
 Cette application est composée d'un **Frontend React** (Vite) et d'un **Backend FastAPI**. Elle permet de suivre les flux de données aériennes en temps réel.
 

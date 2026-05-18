@@ -46,7 +46,7 @@ def send_price_drop_email(
 
     msg = EmailMessage()
     msg["Subject"] = sujet
-    msg["From"] = f"Comparat'air Tracker <{MAIL_USER}>"
+    msg["From"] = f"Comparat'air <{MAIL_USER}>"
     msg["To"] = user_email
     msg.set_content("Veuillez activer le HTML pour voir cet e-mail.")
     msg.add_alternative(contenu_html, subtype="html")
