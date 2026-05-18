@@ -35,11 +35,30 @@ CRON_SECRET = os.environ["CRON_SECRET"]
 
 MAX_CONCURRENT_API_CALLS = 5
 
+NOM_VUE_STATS = '"vue_stats_globales_trajets"'
+
 
 @router.post("/search-flights")
 async def search_flights(search: FlightSearchRequest):
     all_flights = []
     sem = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    stats_map = {}
+    try:
+        month = int(search.date.split("-")[1])
+        cursor.execute(
+            f"SELECT * FROM {NOM_VUE_STATS} WHERE mois_recherche = %s AND origine = %s",
+            (month, search.departure),
+        )
+        for row in cursor.fetchall():
+            stats_map[row["destination"]] = row
+    except Exception as e:
+        print(f"Erreur lors de la récupération des stats : {e}")
+    finally:
+        cursor.close()
+        release_db_connection(conn)
 
     async def fetch_with_sem(client, dest):
         async with sem:
@@ -55,6 +74,9 @@ async def search_flights(search: FlightSearchRequest):
             if isinstance(res, list):
                 all_flights.extend(res)
 
+    for flight in all_flights:
+        flight["stats"] = stats_map.get(flight["arrivee"])
+
     all_flights = sorted(all_flights, key=lambda x: x["prix"])
     return {"results": all_flights}
 
@@ -63,6 +85,22 @@ async def search_flights(search: FlightSearchRequest):
 async def search_group_flights(search: GroupFlightSearchRequest):
     all_combinations = []
     sem = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    stats_map = {}
+    try:
+        month = int(search.date.split("-")[1])
+        cursor.execute(
+            f"SELECT * FROM {NOM_VUE_STATS} WHERE mois_recherche = %s", (month,)
+        )
+        for row in cursor.fetchall():
+            stats_map[(row["origine"], row["destination"])] = row
+    except Exception as e:
+        print(f"Erreur stats groupe : {e}")
+    finally:
+        cursor.close()
+        release_db_connection(conn)
 
     async def fetch_dep_with_sem(client, dest, dep):
         async with sem:
@@ -97,6 +135,11 @@ async def search_group_flights(search: GroupFlightSearchRequest):
             ):
                 total_price = sum(f["prix"] for f in dest_flights_by_dep)
                 if total_price <= search.max_price:
+                    for flight in dest_flights_by_dep:
+                        flight["stats"] = stats_map.get(
+                            (flight["depart"], flight["arrivee"])
+                        )
+
                     all_combinations.append(
                         {
                             "destination": dest,
@@ -214,8 +257,27 @@ def get_user_likes(user_id: int):
         """,
             (user_id,),
         )
-        return {"likes": cursor.fetchall()}
-    except Exception:
+        likes = cursor.fetchall()
+
+        cursor.execute(f"SELECT * FROM {NOM_VUE_STATS}")
+        all_stats = cursor.fetchall()
+        stats_map = {
+            (row["origine"], row["destination"], int(row["mois_recherche"])): row
+            for row in all_stats
+        }
+
+        for like in likes:
+            try:
+                raw_date = like["jour"].split("|")[0].split(" ")[0]
+                parts = raw_date.split("-")
+                month = int(parts[1]) if len(parts[0]) == 4 else int(parts[1])
+                like["stats"] = stats_map.get((like["depart"], like["arrivee"], month))
+            except:
+                like["stats"] = None
+
+        return {"likes": likes}
+    except Exception as e:
+        print("Erreur likes :", e)
         raise HTTPException(
             status_code=500, detail="Impossible de récupérer les favoris"
         )

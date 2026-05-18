@@ -14,23 +14,23 @@ def send_price_drop_email(
     difference = round(abs(old_price - new_price), 2)
 
     if is_drop:
-        sujet = f"📉 Alerte SkyStream : Baisse de prix pour votre vol vers {arrivee} !"
+        sujet = f"Alerte Comparat'air : Baisse de prix pour votre vol vers {arrivee} !"
         titre = f"Bonne nouvelle pour votre vol {depart} ➔ {arrivee} !"
         sous_titre = "Le prix vient de chuter. C'est peut-être le moment de réserver."
         couleur_prix = "#10b981"  #
-        texte_diff = f"Vous économisez {difference} € ! 🎉"
+        texte_diff = f"Vous économisez {difference} € ! "
     else:
-        sujet = f"📈 Alerte SkyStream : Hausse de prix pour votre vol vers {arrivee}"
+        sujet = f"Alerte Comparat'air : Hausse de prix pour votre vol vers {arrivee}"
         titre = f"Attention, le prix de votre vol {depart} ➔ {arrivee} a changé."
         sous_titre = "Le tarif a augmenté. Gardez un œil dessus pour ne pas rater la prochaine baisse !"
         couleur_prix = "#ef4444"
-        texte_diff = f"Le prix a augmenté de {difference} € 😕"
+        texte_diff = f"Le prix a augmenté de {difference} € "
 
     contenu_html = f"""
     <html>
         <body style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
             <div style="max-width: 600px; border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px; text-align: center;">
-                <h1 style="color: #0ea5e9;">SkyStream ✈️</h1>
+                <h1 style="color: #0ea5e9;">Comparat'air ✈️</h1>
                 <h2>{titre}</h2>
                 <p style="font-size: 16px;">{sous_titre}</p>
                 
@@ -46,7 +46,7 @@ def send_price_drop_email(
 
     msg = EmailMessage()
     msg["Subject"] = sujet
-    msg["From"] = f"SkyStream Tracker <{MAIL_USER}>"
+    msg["From"] = f"Comparat'air Tracker <{MAIL_USER}>"
     msg["To"] = user_email
     msg.set_content("Veuillez activer le HTML pour voir cet e-mail.")
     msg.add_alternative(contenu_html, subtype="html")

@@ -1,7 +1,26 @@
 import { useState, useEffect } from 'react';
 
+const AIRPORT_CITIES = {
+  "LHR": "Londres",
+  "JFK": "New York",
+  "LAX": "Los Angeles",
+  "DXB": "Dubaï",
+  "NRT": "Tokyo",
+  "CDG": "Paris",
+  "BCN": "Barcelone",
+  "FCO": "Rome",
+  "MAD": "Madrid",
+  "SIN": "Singapour",
+  "YUL": "Montréal",
+  "MRS": "Marseille",
+};
+
+const getCityName = (code) => {
+  const cleanCode = code?.split(' ')[0]; 
+  return AIRPORT_CITIES[cleanCode] || cleanCode;
+};
+
 export default function HomePage() {
-  // 🎯 GESTION DES MODES DE RECHERCHE
   const [searchMode, setSearchMode] = useState('solo');
   const [lastSearchMode, setLastSearchMode] = useState('solo'); 
   const [groupDepartures, setGroupDepartures] = useState(['', '']);
@@ -155,6 +174,58 @@ export default function HomePage() {
     return match ? match[0] : dateStr;
   };
 
+  // La jauge dynamique (Version 3 zones égales & Sans Tooltip)
+  const renderDynamicGauge = (prix, stats) => {
+    if (!stats || !stats.seuil_alerte_q3_mensuel) {
+      return (
+        <div className="flex flex-col items-center w-full max-w-[120px] mt-1">
+          <div className="relative w-full h-3 bg-slate-200 rounded-full overflow-hidden flex">
+            <div className="w-1/3 bg-[#4ade80] opacity-40"></div>
+            <div className="w-1/3 bg-[#fbbf24] opacity-40"></div>
+            <div className="w-1/3 bg-[#f87171] opacity-40"></div>
+          </div>
+          <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Données en cours</span>
+        </div>
+      );
+    }
+
+    const min = stats.prix_minimum_mensuel;
+    const q1 = stats.seuil_bon_plan_q1_mensuel;
+    const q3 = stats.seuil_alerte_q3_mensuel;
+    const max = Math.max(stats.prix_maximum_mensuel, prix);
+
+    let cursorPosition = 50; 
+
+    if (prix <= min) {
+      cursorPosition = 0;
+    } else if (prix > min && prix <= q1) {
+      const range = q1 - min || 1;
+      cursorPosition = ((prix - min) / range) * 33.33;
+    } else if (prix > q1 && prix <= q3) {
+      const range = q3 - q1 || 1;
+      cursorPosition = 33.33 + (((prix - q1) / range) * 33.33);
+    } else {
+      const range = max - q3 || 1;
+      cursorPosition = 66.66 + (((prix - q3) / range) * 33.33);
+    }
+
+    cursorPosition = Math.max(0, Math.min(100, cursorPosition));
+
+    return (
+      <div className="flex flex-col items-center w-full max-w-[140px] mt-2 relative">
+        <div className="relative w-full h-3 bg-slate-100 rounded-full shadow-inner flex overflow-hidden">
+          <div className="bg-[#4ade80] w-1/3 h-full"></div>
+          <div className="bg-[#fbbf24] w-1/3 h-full"></div>
+          <div className="bg-[#f87171] w-1/3 h-full"></div>
+        </div>
+        <div 
+          className="absolute top-[-4px] w-5 h-5 bg-[#262262] border-[3px] border-white rounded-full shadow-md z-10 transition-all duration-700 flex items-center justify-center pointer-events-none"
+          style={{ left: `calc(${cursorPosition}% - 10px)` }}
+        ></div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen w-full font-sans flex flex-col overflow-x-hidden relative bg-[#f9f9fa]">
 
@@ -276,7 +347,6 @@ export default function HomePage() {
                 ) : (
                   <div className="grid ml-6 grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full pr-6">
                     
-                    {/* 🎯 AFFICHAGE CONDITIONNEL : SOLO VS GROUPE */}
                     {lastSearchMode === 'solo' ? (
                       Object.entries(groupedResults).map(([destination, flights]) => (
                         <div key={destination} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden w-full">
@@ -293,7 +363,7 @@ export default function HomePage() {
                               </div>
                               <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-16">
                                 <div>
-                                  <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{destination.split(' ')[0]}</h3>
+                                  <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{getCityName(destination)}</h3>
                                   <p className="text-[10px] md:text-sm font-bold text-[#262262] uppercase tracking-wider mt-0.5">
                                     {soloDeparture || 'CDG'} - {destination.substring(0, 3)}
                                   </p>
@@ -327,7 +397,7 @@ export default function HomePage() {
                                     </div>
                                     <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
                                     <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[120px]">
-                                      <h4 className="text-xl font-black text-[#262262] leading-tight">{destination.split(' ')[0]}</h4>
+                                      <h4 className="text-xl font-black text-[#262262] leading-tight">{getCityName(destination)}</h4>
                                       <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">
                                         {flight.depart} - {destination.substring(0, 3)}
                                       </span>
@@ -338,24 +408,28 @@ export default function HomePage() {
                                       {extractTime(flight.horaire_arrivee)}
                                     </div>
                                     <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-                                    <div className="flex flex-col items-center justify-center min-w-[70px]">
-                                      <img src={getEcoImage(flight.emissions_diff)} alt="Eco" className="w-8 h-8 object-contain mb-1" />
-                                      <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
-                                        {flight.emissions_diff ? `${flight.emissions_diff} %` : "N/A"}
-                                      </span>
-                                    </div>
-                                    <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-                                    <div className="flex items-center gap-4 min-w-[140px]">
+                                    
+                                    <div className="flex items-center justify-center gap-2 min-w-[90px]">
+                                      <div className="text-[10px] font-black text-slate-800  tracking-widest [writing-mode:vertical-rl] rotate-180">
+                                        CO2
+                                      </div>
                                       <div className="flex flex-col items-center justify-center">
-                                        <span className="text-3xl font-black text-[#262262]">{flight.prix}€</span>
-                                        <div className="relative w-full max-w-[70px] h-1.5 rounded-full mt-1 flex bg-slate-100 overflow-hidden shadow-inner">
-                                          <div className="bg-[#4ade80] h-full w-1/3"></div>
-                                          <div className="bg-[#fbbf24] h-full w-1/3"></div>
-                                          <div className="bg-[#f87171] h-full w-1/3"></div>
-                                          <div className="absolute top-0 h-full w-1.5 bg-[#262262] rounded-full" style={{ left: '30%' }}></div>
-                                        </div>
+                                        <img src={getEcoImage(flight.emissions_diff)} alt="Eco" className="w-8 h-8 object-contain mb-1" />
+                                        <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
+                                          {flight.emissions_diff != null ? `${flight.emissions_diff} %` : "N/A"}
+                                        </span>
                                       </div>
                                     </div>
+
+                                    <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+                                    
+                                    <div className="flex items-center gap-4 min-w-[140px]">
+                                      <div className="flex flex-col items-center justify-center w-full">
+                                        <span className="text-3xl font-black text-[#262262]">{flight.prix}€</span>
+                                        {renderDynamicGauge(flight.prix, flight.stats)}
+                                      </div>
+                                    </div>
+                                    
                                     <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
                                     <button onClick={() => handleLike(flight)} className="hover:scale-110 transition-transform flex items-center justify-center min-w-[40px]" disabled={likedFlights.has(flightSignature)}>
                                       <img src={likedFlights.has(flightSignature) ? "/liked.png" : "/notlike.png"} alt="Like" className="w-6 h-6 md:w-8 md:h-8 object-contain" />
@@ -381,7 +455,7 @@ export default function HomePage() {
                                 </div>
                                 <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-16">
                                   <div>
-                                    <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{destination.split(' ')[0]}</h3>
+                                    <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{getCityName(destination)}</h3>
                                     <p className="text-[10px] md:text-sm font-bold text-[#262262] uppercase tracking-wider mt-0.5">
                                       {combo.flights.map(f => f.depart).join(', ')} - {destination.substring(0, 3)}
                                     </p>
@@ -403,7 +477,6 @@ export default function HomePage() {
                                   return (
                                     <div key={flight.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col xl:flex-row justify-between items-center hover:bg-slate-50 transition-colors gap-6 xl:gap-4 relative mt-2">
                                       
-                                      {/* Petit badge pour indiquer le départ */}
                                       <span className="absolute -top-3 left-4 bg-[#262262] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
                                         Vol depuis {flight.depart}
                                       </span>
@@ -413,7 +486,8 @@ export default function HomePage() {
                                       </div>
                                       <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
                                       <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[120px]">
-                                        <h4 className="text-xl font-black text-[#262262] leading-tight">{destination.split(' ')[0]}</h4>
+                                        {/* 🎯 NOUVEAU : La ville */}
+                                        <h4 className="text-xl font-black text-[#262262] leading-tight">{getCityName(destination)}</h4>
                                         <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">
                                           {flight.depart} - {destination.substring(0, 3)}
                                         </span>
@@ -424,18 +498,28 @@ export default function HomePage() {
                                         {extractTime(flight.horaire_arrivee)}
                                       </div>
                                       <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-                                      <div className="flex flex-col items-center justify-center min-w-[70px]">
-                                        <img src={getEcoImage(flight.emissions_diff)} alt="Eco" className="w-8 h-8 object-contain mb-1" />
-                                        <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
-                                          {flight.emissions_diff ? `${flight.emissions_diff} %` : "N/A"}
-                                        </span>
+                                      
+                                      <div className="flex items-center justify-center gap-2 min-w-[90px]">
+                                        <div className="text-[10px] font-black text-slate-300 tracking-widest [writing-mode:vertical-rl] rotate-180">
+                                          CO2
+                                        </div>
+                                        <div className="flex flex-col items-center justify-center">
+                                          <img src={getEcoImage(flight.emissions_diff)} alt="Eco" className="w-8 h-8 object-contain mb-1" />
+                                          <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
+                                            {flight.emissions_diff != null ? `${flight.emissions_diff} %` : "N/A"}
+                                          </span>
+                                        </div>
                                       </div>
+
                                       <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+                                      
                                       <div className="flex items-center gap-4 min-w-[140px]">
                                         <div className="flex flex-col items-center justify-center w-full">
                                           <span className="text-3xl font-black text-[#262262]">{flight.prix}€</span>
+                                          {renderDynamicGauge(flight.prix, flight.stats)}
                                         </div>
                                       </div>
+
                                       <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
                                       <button onClick={() => handleLike(flight)} className="hover:scale-110 transition-transform flex items-center justify-center min-w-[40px]" disabled={likedFlights.has(flightSignature)}>
                                         <img src={likedFlights.has(flightSignature) ? "/liked.png" : "/notlike.png"} alt="Like" className="w-6 h-6 md:w-8 md:h-8 object-contain" />
