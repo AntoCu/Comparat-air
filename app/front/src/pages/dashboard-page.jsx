@@ -98,9 +98,11 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshAll();
     const interval = setInterval(fetchLogs, 10000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const kpis = [
@@ -120,12 +122,6 @@ export default function DashboardPage() {
             className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition shadow-sm font-medium text-sm"
           >
             Actualiser les données
-          </button>
-          <button 
-            onClick={() => navigate('/menu')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm font-medium text-sm"
-          >
-            Retour au Menu
           </button>
         </div>
       </div>
