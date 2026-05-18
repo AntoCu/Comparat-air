@@ -34,7 +34,9 @@ jobs:
         run: pip install "safety<3.0" bandit
       - name: Check Dependencies (Safety)
         run: |
-          touch .safety-policy.yml
+          echo "security:
+            policy:
+              version: 1.0" > .safety-policy.yml
           safety check -r app/back/requirements.txt --full-report
       - name: Check Code Patterns (Bandit)
         run: bandit -r app/back/ -lll 
