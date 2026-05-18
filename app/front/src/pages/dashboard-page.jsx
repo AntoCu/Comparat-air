@@ -98,7 +98,6 @@ export default function DashboardPage() {
     refreshAll();
     const interval = setInterval(fetchLogs, 10000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const kpis = [
@@ -106,16 +105,16 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-8 md:p-12 bg-gray-50 min-h-screen">
+    <div className="p-8 md:p-12 bg-gray-50 min-h-screen mt-24">
       
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-950">Tableau de Bord des statistiques</h1>
+          <h1 className="text-3xl font-extrabold text-[#262262]">Tableau de Bord des statistiques</h1>
         </div>
         <div className="flex gap-3">
           <button 
             onClick={refreshAll}
-            className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition shadow-sm font-medium text-sm"
+            className="px-4 py-2 bg-white border border-gray-200 text-[#262262] rounded-lg hover:bg-gray-50 transition shadow-sm font-medium text-sm"
           >
             Actualiser les données
           </button>
@@ -134,9 +133,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         
-        <ChartCard title="Flux de Logs SIEM (Temps réel)" className="xl:col-span-2">
+        <ChartCard title="Flux de Logs SIEM (Temps réel)" >
           <div className="overflow-x-auto h-[350px] overflow-y-auto">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50 sticky top-0">
