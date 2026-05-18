@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer, BarChart, Bar,
   XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend
@@ -42,9 +41,7 @@ const ChartCard = ({ title, children, className }) => (
   </div>
 );
 
-export default function DashboardPage() {
-  const navigate = useNavigate();
-  
+export default function DashboardPage() {  
   const [logs, setLogs] = useState([]);
   const [totalUsers, setTotalUsers] = useState("...");
   const [errorMessage, setErrorMessage] = useState('');
@@ -98,7 +95,6 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshAll();
     const interval = setInterval(fetchLogs, 10000);
     return () => clearInterval(interval);
