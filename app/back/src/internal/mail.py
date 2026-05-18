@@ -14,19 +14,17 @@ def send_price_drop_email(
     difference = round(abs(old_price - new_price), 2)
 
     if is_drop:
-        sujet = (
-            f"📉 Alerte Comparat'air : Baisse de prix pour votre vol vers {arrivee} !"
-        )
+        sujet = f"Alerte Comparat'air : Baisse de prix pour votre vol vers {arrivee} !"
         titre = f"Bonne nouvelle pour votre vol {depart} ➔ {arrivee} !"
         sous_titre = "Le prix vient de chuter. C'est peut-être le moment de réserver."
         couleur_prix = "#10b981"  #
-        texte_diff = f"Vous économisez {difference} € ! 🎉"
+        texte_diff = f"Vous économisez {difference} € ! "
     else:
-        sujet = f"📈 Alerte Comparat'air : Hausse de prix pour votre vol vers {arrivee}"
+        sujet = f"Alerte Comparat'air : Hausse de prix pour votre vol vers {arrivee}"
         titre = f"Attention, le prix de votre vol {depart} ➔ {arrivee} a changé."
         sous_titre = "Le tarif a augmenté. Gardez un œil dessus pour ne pas rater la prochaine baisse !"
         couleur_prix = "#ef4444"
-        texte_diff = f"Le prix a augmenté de {difference} € 😕"
+        texte_diff = f"Le prix a augmenté de {difference} € "
 
     contenu_html = f"""
     <html>

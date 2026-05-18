@@ -11,7 +11,7 @@ from src.router.routes import router as api_router
 
 load_dotenv()
 
-app = FastAPI(title="Comparat'air API")
+app = FastAPI(title="Comparat'air")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

@@ -17,7 +17,8 @@ from src.models import (
 from src.internal.mail import send_price_drop_email
 from src.router.tasks import fetch_airport
 from src.internal.config import RAPIDAPI_KEY, DESTINATIONS, limiter, LOG_FILE_PATH
-from src.internal.database import get_db_connection, get_total_users
+
+from src.internal.database import get_db_connection, release_db_connection, get_total_users
 from src.internal.security import (
     sanitize_input,
     is_password_strong,
@@ -32,16 +33,49 @@ router = APIRouter()
 
 CRON_SECRET = os.environ["CRON_SECRET"]
 
+MAX_CONCURRENT_API_CALLS = 5
+
+NOM_VUE_STATS = '"vue_stats_globales_trajets"'
+
 
 @router.post("/search-flights")
 async def search_flights(search: FlightSearchRequest):
     all_flights = []
-    async with httpx.AsyncClient() as client:
-        for dest in DESTINATIONS:
+    sem = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    stats_map = {}
+    try:
+        month = int(search.date.split("-")[1])
+        cursor.execute(
+            f"SELECT * FROM {NOM_VUE_STATS} WHERE mois_recherche = %s AND origine = %s",
+            (month, search.departure),
+        )
+        for row in cursor.fetchall():
+            stats_map[row["destination"]] = row
+    except Exception as e:
+        print(f"Erreur lors de la récupération des stats : {e}")
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+    async def fetch_with_sem(client, dest):
+        async with sem:
             print(f" Recherche vers {dest} en cours...")
-            airport_results = await fetch_airport(client, dest, search, RAPIDAPI_KEY)
-            all_flights.extend(airport_results)
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(0.5)
+            return await fetch_airport(client, dest, search, RAPIDAPI_KEY)
+
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_with_sem(client, dest) for dest in DESTINATIONS]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for res in results:
+            if isinstance(res, list):
+                all_flights.extend(res)
+
+    for flight in all_flights:
+        flight["stats"] = stats_map.get(flight["arrivee"])
 
     all_flights = sorted(all_flights, key=lambda x: x["prix"])
     return {"results": all_flights}
@@ -50,41 +84,62 @@ async def search_flights(search: FlightSearchRequest):
 @router.post("/search-group-flights")
 async def search_group_flights(search: GroupFlightSearchRequest):
     all_combinations = []
+    sem = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    stats_map = {}
+    try:
+        month = int(search.date.split("-")[1])
+        cursor.execute(
+            f"SELECT * FROM {NOM_VUE_STATS} WHERE mois_recherche = %s", (month,)
+        )
+        for row in cursor.fetchall():
+            stats_map[(row["origine"], row["destination"])] = row
+    except Exception as e:
+        print(f"Erreur stats groupe : {e}")
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+    async def fetch_dep_with_sem(client, dest, dep):
+        async with sem:
+            await asyncio.sleep(0.5)
+            s = FlightSearchRequest(
+                departure=dep,
+                date=search.date,
+                max_price=search.max_price,
+                passengers=1,
+                is_direct=search.is_direct,
+            )
+            return await fetch_airport(client, dest, s, RAPIDAPI_KEY)
 
     async with httpx.AsyncClient() as client:
         for dest in DESTINATIONS:
             print(f"👯 Recherche de groupe vers {dest} en cours...")
+            tasks = [
+                fetch_dep_with_sem(client, dest, dep)
+                for dep in search.departures
+                if dep.strip()
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
             dest_flights_by_dep = []
-            valid_combination = True
+            for res in results:
+                if isinstance(res, list) and res:
+                    cheapest = min(res, key=lambda x: x["prix"])
+                    dest_flights_by_dep.append(cheapest)
 
-            for dep in search.departures:
-                if not dep.strip():
-                    continue
-
-                s = FlightSearchRequest(
-                    departure=dep,
-                    date=search.date,
-                    max_price=search.max_price,
-                    passengers=1,
-                    is_direct=search.is_direct,
-                )
-
-                res = await fetch_airport(client, dest, s, RAPIDAPI_KEY)
-
-                if not res:
-                    valid_combination = False
-                    break
-
-                cheapest = min(res, key=lambda x: x["prix"])
-                dest_flights_by_dep.append(cheapest)
-
-                await asyncio.sleep(1.5)
-
-            if valid_combination and dest_flights_by_dep:
+            if len(dest_flights_by_dep) == len(
+                [d for d in search.departures if d.strip()]
+            ):
                 total_price = sum(f["prix"] for f in dest_flights_by_dep)
-
                 if total_price <= search.max_price:
+                    for flight in dest_flights_by_dep:
+                        flight["stats"] = stats_map.get(
+                            (flight["depart"], flight["arrivee"])
+                        )
+
                     all_combinations.append(
                         {
                             "destination": dest,
@@ -123,22 +178,20 @@ async def add_like(like: FlightLikeRequest):
         )
 
         result = cursor.fetchone()
-
-        if result:
-            tracked_flight_id = result[0]
-        else:
-            cursor.execute(
+        tracked_flight_id = (
+            result[0]
+            if result
+            else cursor.execute(
                 'SELECT id FROM "Tracked_Flights" WHERE flight_id = %s AND passengers_nbr = %s',
                 (signature, like.passagers),
             )
-            tracked_flight_id = cursor.fetchone()[0]
+            or cursor.fetchone()[0]
+        )
 
-        # On ajoute le prix actuel à l'historique des prix
         cursor.execute(
             'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
             (tracked_flight_id, like.prix),
         )
-
         cursor.execute(
             'INSERT INTO "Likes" (user_id, tracked_flight_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;',
             (like.user_id, tracked_flight_id),
@@ -146,16 +199,14 @@ async def add_like(like: FlightLikeRequest):
 
         conn.commit()
         return {"message": "Vol ajouté aux favoris avec succès"}
-
     except Exception as e:
-        print(f"Erreur lors du like : {e}")
         if conn:
             conn.rollback()
         return {"error": "Impossible d'ajouter ce vol aux favoris"}
     finally:
         if conn:
             cursor.close()
-            conn.close()
+            release_db_connection(conn)
 
 
 @router.post("/register")
@@ -189,7 +240,7 @@ def register(user: UserRegister):
         raise HTTPException(status_code=500, detail="Erreur base de données")
     finally:
         cursor.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/likes/{user_id}")
@@ -206,14 +257,33 @@ def get_user_likes(user_id: int):
         """,
             (user_id,),
         )
-        return {"likes": cursor.fetchall()}
-    except Exception:
+        likes = cursor.fetchall()
+
+        cursor.execute(f"SELECT * FROM {NOM_VUE_STATS}")
+        all_stats = cursor.fetchall()
+        stats_map = {
+            (row["origine"], row["destination"], int(row["mois_recherche"])): row
+            for row in all_stats
+        }
+
+        for like in likes:
+            try:
+                raw_date = like["jour"].split("|")[0].split(" ")[0]
+                parts = raw_date.split("-")
+                month = int(parts[1]) if len(parts[0]) == 4 else int(parts[1])
+                like["stats"] = stats_map.get((like["depart"], like["arrivee"], month))
+            except:
+                like["stats"] = None
+
+        return {"likes": likes}
+    except Exception as e:
+        print("Erreur likes :", e)
         raise HTTPException(
             status_code=500, detail="Impossible de récupérer les favoris"
         )
     finally:
         cursor.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.post("/login")
@@ -246,7 +316,7 @@ def login(user: UserLogin, request: Request):
         }
     finally:
         cursor.close()
-        conn.close()
+        release_db_connection(conn)
 
 
 @router.get("/admin/logs")
@@ -257,12 +327,18 @@ def get_logs(request: Request):
         return []
     try:
         with open(LOG_FILE_PATH, "r", encoding="utf-8") as f:
-            logs = [json.loads(line) for line in f.readlines() if line.strip()]
-            return logs[::-1][:50]
+            return [json.loads(line) for line in f.readlines() if line.strip()][::-1][
+                :50
+            ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lecture logs: {str(e)}")
 
 
+@router.post("/search-destination")
+@limiter.limit("20 per minute")
+def search_destination(request: SearchRequest, request_obj: Request):
+    return {"cleaned_query": sanitize_input(request.query)}
+ 
 @router.get("/admin/stats")
 def get_dashboard_stats():
     total_users = get_total_users()
@@ -277,123 +353,122 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
     try:
         cursor.execute(
             """
-            SELECT 
-                u.email as user_email,
-                tf.id as tracked_flight_id, 
-                tf."from" as depart, 
-                tf.dest as arrivee, 
-                tf.day as jour, 
-                tf.passengers_nbr as passagers,
-                (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = tf.id ORDER BY id DESC LIMIT 1) as old_price
-            FROM "Likes" l 
-            JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id 
-            JOIN "Users" u ON l.user_id = u.id
+            SELECT u.email as user_email, tf.id as tracked_flight_id, tf."from" as depart, 
+                   tf.dest as arrivee, tf.day as jour, tf.passengers_nbr as passagers,
+                   (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = tf.id ORDER BY id DESC LIMIT 1) as old_price
+            FROM "Likes" l JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id JOIN "Users" u ON l.user_id = u.id
             WHERE l.user_id = %s
             """,
             (user_id,),
         )
         liked_flights = cursor.fetchall()
-
-        if not liked_flights:
-            return {"message": "Aucun vol à rafraîchir."}
-
-        updates = 0
-        async with httpx.AsyncClient() as client:
-            for flight in liked_flights:
-                try:
-                    raw_date = flight["jour"].split("|")[0].split(" ")[0]
-                    parts = raw_date.split("-")
-                    if len(parts) == 3:
-                        if len(parts[0]) == 4:
-                            api_date = (
-                                f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
-                            )
-                        else:
-                            api_date = (
-                                f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
-                            )
-                    else:
-                        api_date = raw_date
-                except Exception:
-                    api_date = flight["jour"]
-
-                url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
-                querystring = {
-                    "departure_id": flight["depart"],
-                    "arrival_id": flight["arrivee"],
-                    "outbound_date": api_date,
-                    "adults": flight["passagers"],
-                    "currency": "EUR",
-                }
-                headers = {
-                    "X-RapidAPI-Key": RAPIDAPI_KEY,
-                    "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
-                }
-                try:
-                    response = await client.get(
-                        url, headers=headers, params=querystring, timeout=15.0
-                    )
-                    if response.status_code == 200:
-                        flights_list = response.json().get("data", {}).get(
-                            "itineraries", {}
-                        ).get("topFlights", []) + response.json().get("data", {}).get(
-                            "itineraries", {}
-                        ).get("otherFlights", [])
-
-                        if flights_list:
-                            min_price = min(
-                                (
-                                    opt.get("price", {}).get("raw", 9999)
-                                    if isinstance(opt.get("price"), dict)
-                                    else opt.get("price", 9999)
-                                )
-                                for opt in flights_list
-                            )
-
-                            cursor.execute(
-                                'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
-                                (flight["tracked_flight_id"], min_price),
-                            )
-                            updates += 1
-
-                            old_price = flight["old_price"]
-                            if old_price is not None and min_price != old_price:
-                                action = "Baisse" if min_price < old_price else "Hausse"
-                                print(
-                                    f"{action} détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
-                                )
-
-                                background_tasks.add_task(
-                                    send_price_drop_email,
-                                    user_email=flight["user_email"],
-                                    depart=flight["depart"],
-                                    arrivee=flight["arrivee"],
-                                    old_price=float(old_price),
-                                    new_price=float(min_price),
-                                )
-
-                except Exception as e:
-                    print(f"Erreur avec l'API Flights : {e}")
-
-                await asyncio.sleep(1)
-
-        conn.commit()
-        return {
-            "message": f"Mise à jour terminée ! {updates} prix actualisés. Les alertes mail sont parties si besoin."
-        }
-    except Exception as e:
-        conn.rollback()
-        print(f"Erreur SQL Refresh : {e}")
-        raise HTTPException(status_code=500, detail="Erreur lors du rafraîchissement")
     finally:
         cursor.close()
-        conn.close()
+        release_db_connection(conn)
 
+    if not liked_flights:
+        return {"message": "Aucun vol à rafraîchir."}
 
-@router.post("/search-destination")
-@limiter.limit("20 per minute")
-def search_destination(request: SearchRequest, request_obj: Request):
-    return {"cleaned_query": sanitize_input(request.query)}
+    sem = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
+
+    async def fetch_flight_price(client, flight):
+        async with sem:
+            await asyncio.sleep(0.5)
+            try:
+                raw_date = flight["jour"].split("|")[0].split(" ")[0]
+                parts = raw_date.split("-")
+                api_date = (
+                    f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+                    if len(parts) == 3 and len(parts[0]) == 4
+                    else (
+                        f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                        if len(parts) == 3
+                        else raw_date
+                    )
+                )
+            except:
+                api_date = flight["jour"]
+
+            url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
+            querystring = {
+                "departure_id": flight["depart"],
+                "arrival_id": flight["arrivee"],
+                "outbound_date": api_date,
+                "adults": flight["passagers"],
+                "currency": "EUR",
+            }
+            headers = {
+                "X-RapidAPI-Key": RAPIDAPI_KEY,
+                "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
+            }
+
+            try:
+                response = await client.get(
+                    url, headers=headers, params=querystring, timeout=15.0
+                )
+                if response.status_code == 200:
+                    flights_list = response.json().get("data", {}).get(
+                        "itineraries", {}
+                    ).get("topFlights", []) + response.json().get("data", {}).get(
+                        "itineraries", {}
+                    ).get("otherFlights", [])
+                    if flights_list:
+                        min_price = min(
+                            opt.get("price", {}).get("raw", 9999)
+                            if isinstance(opt.get("price"), dict)
+                            else opt.get("price", 9999)
+                            for opt in flights_list
+                        )
+                        return {"flight": flight, "new_price": min_price}
+            except Exception as e:
+                print(f"Erreur API pour {flight['arrivee']}: {e}")
+            return None
+
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_flight_price(client, flight) for flight in liked_flights]
+        results = await asyncio.gather(*tasks)
+
+    updates = 0
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        for res in results:
+            if res:
+                flight = res["flight"]
+                new_price = float(res["new_price"])
+                old_price_raw = flight["old_price"]
+                old_price = float(old_price_raw) if old_price_raw is not None else None
+
+                if old_price is None or new_price != old_price:
+                    cursor.execute(
+                        'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
+                        (flight["tracked_flight_id"], new_price),
+                    )
+                    updates += 1
+
+                    if old_price is not None:
+                        action = "Baisse" if new_price < old_price else "Hausse"
+                        print(
+                            f"[{action}] détectée pour {flight['arrivee']} : {old_price}€ ➔ {new_price}€"
+                        )
+                        background_tasks.add_task(
+                            send_price_drop_email,
+                            user_email=flight["user_email"],
+                            depart=flight["depart"],
+                            arrivee=flight["arrivee"],
+                            old_price=old_price,
+                            new_price=new_price,
+                        )
+        conn.commit()
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+    if updates == 0:
+        return {"message": "Vérification terminée. Aucun prix n'a changé !"}
+    return {
+        "message": f"Mise à jour terminée ! {updates} prix modifiés. Les alertes ont été envoyées."
+    }
 
 
 @router.get("/cron/refresh-prices")
@@ -406,133 +481,122 @@ async def auto_refresh_flight_prices(
     print("[VERCEL CRON] Démarrage de l'actualisation automatique...")
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-
     try:
         cursor.execute(
-            """
-            SELECT 
-                id, 
-                "from" as depart, 
-                dest as arrivee, 
-                day as jour, 
-                passengers_nbr as passagers,
-                (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = "Tracked_Flights".id ORDER BY id DESC LIMIT 1) as old_price
-            FROM "Tracked_Flights"
-            """
+            'SELECT id, "from" as depart, dest as arrivee, day as jour, passengers_nbr as passagers, (SELECT price FROM "Price_History" ph WHERE ph.tracked_flight_id = "Tracked_Flights".id ORDER BY id DESC LIMIT 1) as old_price FROM "Tracked_Flights"'
         )
         tracked_flights = cursor.fetchall()
-
-        if not tracked_flights:
-            return {"status": "ok", "message": "Aucun vol à actualiser."}
-
-        updates = 0
-        mails_sent = 0
-
-        async with httpx.AsyncClient() as client:
-            for flight in tracked_flights:
-                try:
-                    raw_date = flight["jour"].split("|")[0].split(" ")[0]
-                    parts = raw_date.split("-")
-                    if len(parts) == 3:
-                        if len(parts[0]) == 4:
-                            api_date = (
-                                f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
-                            )
-                        else:
-                            api_date = (
-                                f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
-                            )
-                    else:
-                        api_date = raw_date
-                except Exception:
-                    api_date = flight["jour"]
-
-                url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
-                querystring = {
-                    "departure_id": flight["depart"],
-                    "arrival_id": flight["arrivee"],
-                    "outbound_date": api_date,
-                    "adults": flight["passagers"],
-                    "currency": "EUR",
-                }
-                headers = {
-                    "X-RapidAPI-Key": RAPIDAPI_KEY,
-                    "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
-                }
-
-                try:
-                    response = await client.get(
-                        url, headers=headers, params=querystring, timeout=15.0
-                    )
-                    if response.status_code == 200:
-                        itineraries = (
-                            response.json().get("data", {}).get("itineraries", {})
-                        )
-                        flights_list = itineraries.get(
-                            "topFlights", []
-                        ) + itineraries.get("otherFlights", [])
-
-                        if flights_list:
-                            min_price = min(
-                                (
-                                    opt.get("price", {}).get("raw", 9999)
-                                    if isinstance(opt.get("price"), dict)
-                                    else opt.get("price", 9999)
-                                )
-                                for opt in flights_list
-                            )
-
-                            cursor.execute(
-                                'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
-                                (flight["id"], min_price),
-                            )
-                            updates += 1
-
-                            old_price = flight["old_price"]
-                            if old_price is not None and min_price != old_price:
-                                action = "Baisse" if min_price < old_price else "Hausse"
-                                print(
-                                    f"[CRON] {action} globale détectée pour {flight['arrivee']} : {old_price}€ ➔ {min_price}€"
-                                )
-
-                                cursor.execute(
-                                    """
-                                    SELECT u.email 
-                                    FROM "Likes" l
-                                    JOIN "Users" u ON l.user_id = u.id
-                                    WHERE l.tracked_flight_id = %s
-                                    """,
-                                    (flight["id"],),
-                                )
-                                users_to_notify = cursor.fetchall()
-
-                                for user in users_to_notify:
-                                    background_tasks.add_task(
-                                        send_price_drop_email,
-                                        user_email=user["email"],
-                                        depart=flight["depart"],
-                                        arrivee=flight["arrivee"],
-                                        old_price=float(old_price),
-                                        new_price=float(min_price),
-                                    )
-                                    mails_sent += 1
-
-                except Exception as e:
-                    print(f"[CRON] Erreur API pour le vol {flight['id']} : {e}")
-
-                await asyncio.sleep(1.5)
-
-        conn.commit()
-        return {"status": "success", "updates": updates, "mails_queued": mails_sent}
-
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if conn:
-            cursor.close()
-            conn.close()
+        cursor.close()
+        release_db_connection(conn)
+
+    if not tracked_flights:
+        return {"status": "ok", "message": "Aucun vol à actualiser."}
+
+    sem = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS)
+
+    async def fetch_cron_price(client, flight):
+        async with sem:
+            await asyncio.sleep(0.5)
+            try:
+                raw_date = flight["jour"].split("|")[0].split(" ")[0]
+                parts = raw_date.split("-")
+                api_date = (
+                    f"{parts[0]}-{parts[1].zfill(2)}-{parts[2].zfill(2)}"
+                    if len(parts) == 3 and len(parts[0]) == 4
+                    else (
+                        f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                        if len(parts) == 3
+                        else raw_date
+                    )
+                )
+            except:
+                api_date = flight["jour"]
+
+            url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
+            querystring = {
+                "departure_id": flight["depart"],
+                "arrival_id": flight["arrivee"],
+                "outbound_date": api_date,
+                "adults": flight["passagers"],
+                "currency": "EUR",
+            }
+            headers = {
+                "X-RapidAPI-Key": RAPIDAPI_KEY,
+                "X-RapidAPI-Host": "google-flights2.p.rapidapi.com",
+            }
+
+            try:
+                response = await client.get(
+                    url, headers=headers, params=querystring, timeout=15.0
+                )
+                if response.status_code == 200:
+                    flights_list = response.json().get("data", {}).get(
+                        "itineraries", {}
+                    ).get("topFlights", []) + response.json().get("data", {}).get(
+                        "itineraries", {}
+                    ).get("otherFlights", [])
+                    if flights_list:
+                        min_price = min(
+                            opt.get("price", {}).get("raw", 9999)
+                            if isinstance(opt.get("price"), dict)
+                            else opt.get("price", 9999)
+                            for opt in flights_list
+                        )
+                        return {"flight": flight, "new_price": min_price}
+            except Exception as e:
+                pass
+            return None
+
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_cron_price(client, flight) for flight in tracked_flights]
+        results = await asyncio.gather(*tasks)
+
+    updates, mails_sent = 0, 0
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        for res in results:
+            if res:
+                flight = res["flight"]
+                new_price = float(res["new_price"])
+                old_price_raw = flight["old_price"]
+                old_price = float(old_price_raw) if old_price_raw is not None else None
+
+                if old_price is None or new_price != old_price:
+                    cursor.execute(
+                        'INSERT INTO "Price_History" (tracked_flight_id, price) VALUES (%s, %s);',
+                        (flight["id"], new_price),
+                    )
+                    updates += 1
+
+                    if old_price is not None:
+                        action = "Baisse" if new_price < old_price else "Hausse"
+                        print(
+                            f"[CRON] {action} pour {flight['arrivee']} : {old_price}€ ➔ {new_price}€"
+                        )
+                        cursor.execute(
+                            'SELECT u.email FROM "Likes" l JOIN "Users" u ON l.user_id = u.id WHERE l.tracked_flight_id = %s',
+                            (flight["id"],),
+                        )
+                        users_to_notify = cursor.fetchall()
+
+                        for user in users_to_notify:
+                            background_tasks.add_task(
+                                send_price_drop_email,
+                                user_email=user["email"],
+                                depart=flight["depart"],
+                                arrivee=flight["arrivee"],
+                                old_price=old_price,
+                                new_price=new_price,
+                            )
+                            mails_sent += 1
+        conn.commit()
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+    return {"status": "success", "updates": updates, "mails_queued": mails_sent}
 
 
 @router.post("/change-password")
@@ -568,4 +632,4 @@ def change_password(req: ChangePasswordRequest):
         raise HTTPException(status_code=500, detail="Erreur lors de la mise à jour.")
     finally:
         cursor.close()
-        conn.close()
+        release_db_connection(conn)

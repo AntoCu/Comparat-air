@@ -1,5 +1,25 @@
 import { useState, useEffect } from 'react';
 
+const AIRPORT_CITIES = {
+  "LHR": "Londres",
+  "JFK": "New York",
+  "LAX": "Los Angeles",
+  "DXB": "Dubaï",
+  "NRT": "Tokyo",
+  "CDG": "Paris",
+  "BCN": "Barcelone",
+  "FCO": "Rome",
+  "MAD": "Madrid",
+  "SIN": "Singapour",
+  "YUL": "Montréal",
+  "MRS": "Marseille",
+};
+
+const getCityName = (code) => {
+  const cleanCode = code?.split(' ')[0]; 
+  return AIRPORT_CITIES[cleanCode] || cleanCode;
+};
+
 export default function LikesPage() {
   const [likedFlights, setLikedFlights] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,10 +95,61 @@ export default function LikesPage() {
     return '/eco-bad.png';
   };
 
+  const renderDynamicGauge = (prix, stats) => {
+    if (!stats || !stats.seuil_alerte_q3_mensuel) {
+      return (
+        <div className="flex flex-col items-center w-full max-w-[120px] mt-1">
+          <div className="relative w-full h-3 bg-slate-200 rounded-full overflow-hidden flex">
+            <div className="w-1/3 bg-[#4ade80] opacity-40"></div>
+            <div className="w-1/3 bg-[#fbbf24] opacity-40"></div>
+            <div className="w-1/3 bg-[#f87171] opacity-40"></div>
+          </div>
+          <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Données en cours</span>
+        </div>
+      );
+    }
+
+    const min = stats.prix_minimum_mensuel;
+    const q1 = stats.seuil_bon_plan_q1_mensuel;
+    const q3 = stats.seuil_alerte_q3_mensuel;
+    
+    const max = Math.max(stats.prix_maximum_mensuel, prix);
+
+    let cursorPosition = 50; 
+
+    if (prix <= min) {
+      cursorPosition = 0;
+    } else if (prix > min && prix <= q1) {
+      const range = q1 - min || 1;
+      cursorPosition = ((prix - min) / range) * 33.33;
+    } else if (prix > q1 && prix <= q3) {
+      const range = q3 - q1 || 1;
+      cursorPosition = 33.33 + (((prix - q1) / range) * 33.33);
+    } else {
+      const range = max - q3 || 1;
+      cursorPosition = 66.66 + (((prix - q3) / range) * 33.33);
+    }
+
+    cursorPosition = Math.max(0, Math.min(100, cursorPosition));
+
+    return (
+      <div className="flex flex-col items-center w-full max-w-[140px] mt-2 relative">
+        <div className="relative w-full h-3 bg-slate-100 rounded-full shadow-inner flex overflow-hidden">
+          <div className="bg-[#4ade80] w-1/3 h-full"></div>
+          <div className="bg-[#fbbf24] w-1/3 h-full"></div>
+          <div className="bg-[#f87171] w-1/3 h-full"></div>
+        </div>
+        <div 
+          className="absolute top-[-4px] w-5 h-5 bg-[#262262] border-[3px] border-white rounded-full shadow-md z-10 transition-all duration-700 flex items-center justify-center pointer-events-none"
+          style={{ left: `calc(${cursorPosition}% - 10px)` }}
+        ></div>
+      </div>
+    );
+  };
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center relative font-sans bg-[#f9f9fa]">
-        
         <div 
           className="fixed inset-0 z-0 blur-[4px] scale-105 pointer-events-none"
           style={{
@@ -87,7 +158,6 @@ export default function LikesPage() {
             backgroundPosition: 'center',
           }}
         ></div>
-
         <div className="relative z-10 bg-white/95 backdrop-blur-sm p-8 rounded-3xl shadow-xl text-center border border-slate-200">
           <h2 className="text-3xl font-black text-[#262262] mb-4">Mes Vols Favoris ❤️</h2>
           <p className="text-red-500 font-bold text-lg">
@@ -100,7 +170,6 @@ export default function LikesPage() {
 
   return (
     <div className="min-h-screen w-full font-sans flex flex-col overflow-x-hidden relative pt-32 pb-20 bg-[#f9f9fa]">
-      
       <div 
         className="fixed inset-0 z-0 blur-[4px] scale-105 pointer-events-none"
         style={{
@@ -111,7 +180,6 @@ export default function LikesPage() {
       ></div>
 
       <div className="w-full max-w-5xl mx-auto px-4 md:px-8 relative z-10 flex flex-col flex-1">
-
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
           <h2 className="text-3xl md:text-5xl font-black text-[#262262] drop-shadow-sm">
             Vos coups de coeur
@@ -151,7 +219,7 @@ export default function LikesPage() {
 
                 <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[140px]">
                   <h4 className="text-2xl font-black text-[#262262] leading-tight">
-                    {flight.arrivee.split(' ')[0]}
+                    {getCityName(flight.arrivee)}
                   </h4>
                   <span className="text-[10px] font-bold text-[#262262] opacity-70 uppercase mt-1 tracking-wider">
                     {flight.depart} - {flight.arrivee.substring(0, 3)}
@@ -188,23 +256,23 @@ export default function LikesPage() {
 
                 <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
 
-                <div className="flex flex-col items-center justify-center min-w-[70px]">
-                  <img src={getEcoImage(flight.eco_percent)} alt="Eco" className="w-10 h-10 object-contain mb-1" />
-                  <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
-                    {flight.eco_percent != null ? `${flight.eco_percent} %` : "N/A"}
-                  </span>
+                <div className="flex items-center justify-center gap-2 min-w-[90px]">
+                  <div className="text-[10px] font-black text-slate-800 tracking-widest [writing-mode:vertical-rl] rotate-180">
+                    CO2
+                  </div>
+                  <div className="flex flex-col items-center justify-center">
+                    <img src={getEcoImage(flight.eco_percent)} alt="Eco" className="w-10 h-10 object-contain mb-1" />
+                    <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
+                      {flight.eco_percent != null ? `${flight.eco_percent} %` : "N/A"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
 
                 <div className="flex flex-col items-center justify-center min-w-[140px]">
                   <span className="text-3xl md:text-4xl font-black text-[#262262]">{flight.prix}€</span>
-                  <div className="relative w-full max-w-[80px] h-1.5 rounded-full mt-2 flex bg-slate-100 overflow-hidden shadow-inner">
-                    <div className="bg-[#4ade80] h-full w-1/3"></div>
-                    <div className="bg-[#fbbf24] h-full w-1/3"></div>
-                    <div className="bg-[#f87171] h-full w-1/3"></div>
-                    <div className="absolute top-0 h-full w-1.5 bg-[#262262] rounded-full" style={{ left: '30%' }}></div>
-                  </div>
+                  {renderDynamicGauge(flight.prix, flight.stats)}
                 </div>
 
                 <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
