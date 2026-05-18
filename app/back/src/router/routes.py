@@ -17,7 +17,7 @@ from src.models import (
 from src.internal.mail import send_price_drop_email
 from src.router.tasks import fetch_airport
 from src.internal.config import RAPIDAPI_KEY, DESTINATIONS, limiter, LOG_FILE_PATH
-from src.internal.database import get_db_connection
+from src.internal.database import get_db_connection, get_total_users
 from src.internal.security import (
     sanitize_input,
     is_password_strong,
@@ -261,6 +261,13 @@ def get_logs(request: Request):
             return logs[::-1][:50]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lecture logs: {str(e)}")
+
+
+@router.get("/admin/stats")
+def get_dashboard_stats():
+    total_users = get_total_users()
+
+    return {"kpis": {"total_utilisateurs": total_users}}
 
 
 @router.post("/refresh-likes/{user_id}")
