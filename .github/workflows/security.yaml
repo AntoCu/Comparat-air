@@ -31,12 +31,8 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install Security Tools
-        run: pip install "safety<3.0" bandit
-      - name: Check Dependencies (Safety)
-        run: |
-          echo "security:
-            policy:
-              version: 1.0" > .safety-policy.yml
-          safety check -r app/back/requirements.txt --full-report
+        run: pip install pip-audit bandit
+      - name: Check Dependencies (pip-audit)
+        run: pip-audit -r app/back/requirements.txt
       - name: Check Code Patterns (Bandit)
         run: bandit -r app/back/ -lll 
