@@ -199,7 +199,7 @@ async def add_like(like: FlightLikeRequest):
 
         conn.commit()
         return {"message": "Vol ajouté aux favoris avec succès"}
-    except Exception as e:
+    except Exception :
         if conn:
             conn.rollback()
         return {"error": "Impossible d'ajouter ce vol aux favoris"}
@@ -272,7 +272,7 @@ def get_user_likes(user_id: int):
                 parts = raw_date.split("-")
                 month = int(parts[1]) if len(parts[0]) == 4 else int(parts[1])
                 like["stats"] = stats_map.get((like["depart"], like["arrivee"], month))
-            except:
+            except Exception:
                 like["stats"] = None
 
         return {"likes": likes}
@@ -386,7 +386,7 @@ async def refresh_user_likes(user_id: int, background_tasks: BackgroundTasks):
                         else raw_date
                     )
                 )
-            except:
+            except Exception:
                 api_date = flight["jour"]
 
             url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
@@ -510,7 +510,7 @@ async def auto_refresh_flight_prices(
                         else raw_date
                     )
                 )
-            except:
+            except Exception:
                 api_date = flight["jour"]
 
             url = "https://google-flights2.p.rapidapi.com/api/v1/searchFlights"
@@ -544,7 +544,7 @@ async def auto_refresh_flight_prices(
                             for opt in flights_list
                         )
                         return {"flight": flight, "new_price": min_price}
-            except Exception as e:
+            except Exception :
                 pass
             return None
 
