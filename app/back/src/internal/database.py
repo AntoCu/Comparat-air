@@ -1,4 +1,3 @@
-import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from fastapi import HTTPException
