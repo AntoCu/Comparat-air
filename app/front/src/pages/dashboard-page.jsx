@@ -43,7 +43,7 @@ export default function DashboardPage() {
   const fetchLogs = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('${API_URL}/admin/logs', {
+      const response = await fetch(`${API_URL}/admin/logs`, {
         method: 'GET',
         headers: { 
           'Content-Type': 'application/json',
@@ -66,7 +66,7 @@ export default function DashboardPage() {
   const fetchStats = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('${API_URL}/admin/stats', {
+      const response = await fetch(`${API_URL}/admin/stats`, {
         method: 'GET',
         headers: { 
           'Content-Type': 'application/json',

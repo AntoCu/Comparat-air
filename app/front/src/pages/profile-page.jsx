@@ -49,7 +49,7 @@ export default function ProfilePage({ setIsLoggedIn }) {
     }
 
     try {
-      const response = await fetch('${API_URL}/change-password', {
+      const response = await fetch(`${API_URL}/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

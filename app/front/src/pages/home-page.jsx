@@ -79,7 +79,7 @@ export default function HomePage() {
     await new Promise(resolve => setTimeout(resolve, 800));
     setAnimationState('searching');
 
-    let url = '${API_URL}/search-flights';
+    let url = `${API_URL}/search-flights`;
     let payload = {};
 
     if (searchMode === 'solo') {
@@ -90,7 +90,7 @@ export default function HomePage() {
         passengers: Number(passengers),
       };
     } else {
-      url = '${API_URL}/search-group-flights';
+      url = `${API_URL}/search-group-flights`;
       payload = {
         departures: groupDepartures.filter(d => d.trim() !== ''),
         date,
@@ -132,7 +132,7 @@ export default function HomePage() {
     };
 
     try {
-      const response = await fetch('${API_URL}/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch(`{API_URL}/like`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (response.ok) {
         setLikedFlights(prev => new Set(prev).add(signature));
       }
