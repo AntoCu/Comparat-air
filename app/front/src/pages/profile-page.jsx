@@ -3,9 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 
 export default function ProfilePage({ setIsLoggedIn }) {
   const navigate = useNavigate();
-  
+
   const [likesCount, setLikesCount] = useState(localStorage.getItem('likesCount') || "...");
-  
+
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -22,7 +22,7 @@ export default function ProfilePage({ setIsLoggedIn }) {
         if (response.ok) {
           const data = await response.json();
           const count = data.likes ? data.likes.length : 0;
-          
+
           setLikesCount(count);
           localStorage.setItem('likesCount', count);
         }
@@ -51,13 +51,13 @@ export default function ProfilePage({ setIsLoggedIn }) {
       const response = await fetch('http://127.0.0.1:8000/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          user_id: Number(localStorage.getItem("user_id")), 
-          old_password: oldPassword, 
-          new_password: newPassword 
+        body: JSON.stringify({
+          user_id: Number(localStorage.getItem("user_id")),
+          old_password: oldPassword,
+          new_password: newPassword
         }),
       });
-      
+
       const data = await response.json();
 
       if (response.ok) {
@@ -72,15 +72,16 @@ export default function ProfilePage({ setIsLoggedIn }) {
       } else {
         setMessage({ text: data.detail || "Erreur lors de la modification.", type: "error" });
       }
-    } catch  {
+    } catch (error) {
+      console.error(error);
       setMessage({ text: "Impossible de joindre le serveur.", type: "error" });
     }
   };
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 relative font-sans bg-[#f9f9fa]">
-      
-      <div 
+
+      <div
         className="fixed inset-0 z-0 blur-[4px] scale-105 pointer-events-none"
         style={{
           backgroundImage: 'url("/background.avif")',
@@ -89,10 +90,10 @@ export default function ProfilePage({ setIsLoggedIn }) {
         }}
       ></div>
 
-      <div 
-        className="relative z-10 w-[460px] min-h-[520px] flex flex-col justify-between py-12 drop-shadow-2xl transition-all"
+      <div
+        className="relative z-10 w-[95%] max-w-[460px] min-h-[520px] flex flex-col justify-between py-10 sm:py-12 drop-shadow-2xl mx-auto mt-24 sm:mt-0"
         style={{
-          backgroundImage: 'url("/ticket-bg.png")', 
+          backgroundImage: 'url("/ticket-bg.png")',
           backgroundSize: '100% 100%',
           backgroundRepeat: 'no-repeat',
         }}
@@ -100,8 +101,8 @@ export default function ProfilePage({ setIsLoggedIn }) {
         <h2 className="text-3xl md:text-4xl font-black text-[#262262] mb-4 text-center mt-2">
           Profil
         </h2>
-          
-        <div className="flex flex-col items-center justify-start w-full flex-1 pl-[90px] pr-[30px] gap-4">
+
+        <div className="flex flex-col items-center justify-start w-full flex-1 pl-[20%] pr-[6%] sm:pl-[90px] sm:pr-[30px] gap-4 overflow-hidden">
 
           {message.text && (
             <div className={`text-sm font-bold text-center w-full ${message.type === 'error' ? 'text-red-500' : 'text-green-600'}`}>
@@ -111,26 +112,26 @@ export default function ProfilePage({ setIsLoggedIn }) {
 
           {!isEditingMode ? (
             <>
-              <div className="text-center w-full mt-2">
-                <p className="text-2xl font-black text-[#f97316] uppercase tracking-wide">
+              <div className="text-center w-full mt-2 overflow-hidden">
+                <p className="text-xl sm:text-2xl font-black text-[#f97316] uppercase tracking-wide truncate">
                   {localStorage.getItem('name') || "Passager"}
                 </p>
-                <p className="text-[#6b66c7] font-bold text-sm italic mt-1">
+                <p className="text-[#6b66c7] font-bold text-xs sm:text-sm italic mt-1 truncate">
                   {localStorage.getItem('email')}
                 </p>
               </div>
 
               <div className="w-full bg-[#f4f7fc] border border-[#262262]/20 rounded-xl px-4 py-4 text-center shadow-inner mt-2">
-                <p className="text-[#262262] font-black text-sm uppercase mb-1">Vols en favoris</p>
+                <p className="text-[#262262] font-black text-xs sm:text-sm uppercase mb-1">Vols en favoris</p>
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-4xl font-black text-[#f97316]">{likesCount}</span>
-                  <img src="/Like.png" alt="Cœur" className="w-6 h-6 object-contain opacity-80" />
+                  <span className="text-3xl sm:text-4xl font-black text-[#f97316]">{likesCount}</span>
+                  <img src="/Like.png" alt="Cœur" className="w-5 h-5 sm:w-6 sm:h-6 object-contain opacity-80" />
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={() => setIsEditingMode(true)}
-                className="text-[#6b66c7] hover:text-[#262262] font-bold text-sm underline transition-colors mt-2"
+                className="text-[#6b66c7] hover:text-[#262262] font-bold text-xs sm:text-sm underline transition-colors mt-2"
               >
                 Modifier le mot de passe
               </button>
@@ -143,7 +144,7 @@ export default function ProfilePage({ setIsLoggedIn }) {
                 value={oldPassword}
                 onChange={(e) => setOldPassword(e.target.value)}
                 required
-                className="w-full bg-[#f4f7fc] border border-[#262262]/30 rounded-xl px-4 py-2.5 text-center text-xs font-bold text-[#6b66c7] italic shadow-inner outline-none focus:border-[#f97316]"
+                className="w-full bg-[#f4f7fc] border border-[#262262]/30 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-center text-xs font-bold text-[#6b66c7] italic shadow-inner outline-none focus:border-[#f97316]"
               />
               <input
                 type="password"
@@ -151,7 +152,7 @@ export default function ProfilePage({ setIsLoggedIn }) {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
-                className="w-full bg-[#f4f7fc] border border-[#262262]/30 rounded-xl px-4 py-2.5 text-center text-xs font-bold text-[#6b66c7] italic shadow-inner outline-none focus:border-[#f97316]"
+                className="w-full bg-[#f4f7fc] border border-[#262262]/30 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-center text-xs font-bold text-[#6b66c7] italic shadow-inner outline-none focus:border-[#f97316]"
               />
               <input
                 type="password"
@@ -159,43 +160,43 @@ export default function ProfilePage({ setIsLoggedIn }) {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                className="w-full bg-[#f4f7fc] border border-[#262262]/30 rounded-xl px-4 py-2.5 text-center text-xs font-bold text-[#6b66c7] italic shadow-inner outline-none focus:border-[#f97316]"
+                className="w-full bg-[#f4f7fc] border border-[#262262]/30 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-center text-xs font-bold text-[#6b66c7] italic shadow-inner outline-none focus:border-[#f97316]"
               />
-              
+
               <div className="flex gap-2 mt-1">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsEditingMode(false)}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold py-2 px-2 rounded-xl text-xs flex-1 transition-colors"
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold py-2 px-2 rounded-xl text-[10px] sm:text-xs flex-1 transition-colors"
                 >
                   Annuler
                 </button>
-                <button 
-                  type="submit" 
-                  className="bg-[#262262] hover:bg-[#322d7a] text-white font-bold py-2 px-2 rounded-xl text-xs flex-1 transition-colors shadow-md"
+                <button
+                  type="submit"
+                  className="bg-[#262262] hover:bg-[#322d7a] text-white font-bold py-2 px-2 rounded-xl text-[10px] sm:text-xs flex-1 transition-colors shadow-md"
                 >
                   Valider
                 </button>
               </div>
             </form>
           )}
-          
+
         </div>
 
-        <div className="w-full pl-[90px] pr-[30px] my-5">
+        <div className="w-full pl-[20%] pr-[6%] sm:pl-[90px] sm:pr-[30px] my-4 sm:my-5">
           <div className="border-t-[2px] border-dashed border-[#a5a2d1]/60 w-full"></div>
         </div>
 
-        <div className="flex justify-center gap-4 pl-[90px] pr-[30px] pb-1">
-          <Link 
-            to="/likes" 
-            className="bg-[#f97316] hover:bg-[#e06511] text-white font-bold py-3 px-2 rounded-xl transition-transform hover:scale-105 shadow-md flex-1 text-center text-sm flex items-center justify-center"
+        <div className="flex justify-center gap-2 sm:gap-4 pl-[20%] pr-[6%] sm:pl-[90px] sm:pr-[30px] pb-1">
+          <Link
+            to="/likes"
+            className="bg-[#f97316] hover:bg-[#e06511] text-white font-bold py-2.5 sm:py-3 px-2 rounded-xl transition-transform hover:scale-105 shadow-md flex-1 text-center text-[11px] sm:text-sm flex items-center justify-center"
           >
             Voir mes favoris
           </Link>
-          <button 
+          <button
             onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-2 rounded-xl transition-transform hover:scale-105 shadow-md flex-1 text-sm text-center"
+            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 sm:py-3 px-2 rounded-xl transition-transform hover:scale-105 shadow-md flex-1 text-[11px] sm:text-sm text-center"
           >
             Déconnexion
           </button>

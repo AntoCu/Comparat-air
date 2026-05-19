@@ -43,7 +43,7 @@ router = APIRouter()
 
 CRON_SECRET = os.environ["CRON_SECRET"]
 
-MAX_CONCURRENT_API_CALLS = 5
+MAX_CONCURRENT_API_CALLS = 10
 
 NOM_VUE_STATS = '"vue_stats_globales_trajets"'
 
@@ -209,10 +209,13 @@ async def add_like(like: FlightLikeRequest):
 
         conn.commit()
         return {"message": "Vol ajouté aux favoris avec succès"}
-    except Exception:
+    except Exception as e:
+        print(f" Erreur lors du like : {e}")
         if conn:
             conn.rollback()
-        return {"error": "Impossible d'ajouter ce vol aux favoris"}
+        raise HTTPException(
+            status_code=500, detail="Impossible d'ajouter ce vol aux favoris"
+        )
     finally:
         if conn:
             cursor.close()
@@ -351,7 +354,9 @@ def search_destination(request: SearchRequest, request_obj: Request):
 
 
 @router.get("/admin/stats")
-def get_dashboard_stats():
+def get_dashboard_stats(request: Request):
+    if get_current_user_role(request) != "admin":
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
     total_users = get_total_users()
     mean_passengers = get_mean_passengers_per_flight()
     top_departures = get_top_departure_airports()
@@ -656,3 +661,27 @@ def change_password(req: ChangePasswordRequest):
     finally:
         cursor.close()
         release_db_connection(conn)
+
+
+@router.delete("/likes/{user_id}/{tracked_flight_id}")
+def delete_like(user_id: int, tracked_flight_id: int):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            'DELETE FROM "Likes" WHERE user_id = %s AND tracked_flight_id = %s',
+            (user_id, tracked_flight_id),
+        )
+        conn.commit()
+        return {"message": "Vol retiré des favoris"}
+    except Exception as e:
+        print(f"❌ Erreur lors du unlike : {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(
+            status_code=500, detail="Impossible de retirer ce vol des favoris"
+        )
+    finally:
+        if conn:
+            cursor.close()
+            release_db_connection(conn)

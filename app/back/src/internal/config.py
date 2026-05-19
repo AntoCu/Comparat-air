@@ -15,7 +15,7 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 RAPIDAPI_KEY = os.environ["RAPIDAPI_KEY"]
-DESTINATIONS = ["JFK", "LHR", "LAX"]
+DESTINATIONS = ["JFK", "LHR", "LAX", "DXB", "NRT", "BCN", "MAD", "YUL", "SIN", "FCO"]
 
 # Logs
 LOG_FILE_PATH = Path("skystream_access.log")

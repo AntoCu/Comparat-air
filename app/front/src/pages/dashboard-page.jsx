@@ -7,7 +7,6 @@ import {
 // --- PALETTE DE COULEURS POUR LES GRAPHIQUES ---
 const ECO_COLORS = ['#ECA920' ,'#E42824','#2BBF57'];
 
-// --- COMPOSANTS DE BASE ---
 const KpiCard = ({ kpi }) => (
   <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
     <p className="text-sm font-medium text-gray-500">{kpi.name}</p>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Header from './components/Header'; 
+import Header from './components/Header';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/home-page';
 import LoginPage from './pages/login-page';
@@ -14,7 +14,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
   const [userEmail, setUserEmail] = useState(localStorage.getItem('email') || '');
   // eslint-disable-next-line no-unused-vars
-  const [userName, setUserName] = useState(localStorage.getItem('name') || '');  
+  const [userName, setUserName] = useState(localStorage.getItem('name') || '');
   const handleLogout = () => {
     localStorage.clear();
     setIsLoggedIn(false);
@@ -35,8 +35,14 @@ export default function App() {
             <Route path="/profile" element={isLoggedIn ? <ProfilePage setIsLoggedIn={setIsLoggedIn} /> : <Navigate to="/login" />} />
             <Route path="/likes" element={isLoggedIn ? <LikesPage /> : <Navigate to="/login" />} />
             <Route path="/menu" element={isLoggedIn ? <MenuPage userEmail={userEmail} setIsLoggedIn={setIsLoggedIn} /> : <Navigate to="/login" />} />
-            <Route path="/dashboard" element={isLoggedIn ? <DashboardPage /> : <Navigate to="/login" />} />
-          </Route>
+            <Route
+              path="/dashboard"
+              element={
+                isLoggedIn && localStorage.getItem('role') === 'admin'
+                  ? <DashboardPage />
+                  : <Navigate to="/" />
+              }
+            />          </Route>
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>
