@@ -4,7 +4,6 @@ import {
   XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend
 } from 'recharts';
 
-// --- DONNÉES FACTICES POUR LES GRAPHIQUES (En attendant tes prochaines requêtes SQL) ---
 const topDestinationsData = [
   { name: 'Paris', unique_searches: 250 },
   { name: 'Londres', unique_searches: 174 },
@@ -19,7 +18,6 @@ const devicesData = [
   { name: 'Tablette', value: 5, fill: '#f59e0b' },
 ];
 
-// --- COMPOSANTS DE BASE ---
 const KpiCard = ({ kpi }) => (
   <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
     <p className="text-sm font-medium text-gray-500">{kpi.name}</p>
