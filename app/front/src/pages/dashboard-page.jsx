@@ -83,7 +83,6 @@ export default function DashboardPage() {
         setDepartureDays(data.departures_days);
         setEcoDistribution(data.eco_distribution);
         //setLikesPriceCorrelation(data.likes_price_correlation);
-        console.log("RETOUR COMPLET DU BACKEND :", data);
       }
     } catch (error) {
       console.error("Impossible de récupérer les stats", error);

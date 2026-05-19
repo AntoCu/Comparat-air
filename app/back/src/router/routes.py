@@ -45,7 +45,7 @@ CRON_SECRET = os.environ["CRON_SECRET"]
 
 MAX_CONCURRENT_API_CALLS = 10
 
-NOM_VUE_STATS = '"vue_indicateurs_prix_saisonniers"'
+NOM_VUE_STATS = '"vue_stats_globales_trajets"'
 
 
 @router.post("/search-flights")
@@ -112,6 +112,8 @@ async def search_group_flights(search: GroupFlightSearchRequest):
         cursor.close()
         release_db_connection(conn)
 
+    valid_departures = [d for d in search.departures if d.strip()]
+
     async def fetch_dep_with_sem(client, dest, dep):
         async with sem:
             await asyncio.sleep(0.5)
@@ -124,39 +126,41 @@ async def search_group_flights(search: GroupFlightSearchRequest):
             )
             return await fetch_airport(client, dest, s, RAPIDAPI_KEY)
 
-    async with httpx.AsyncClient() as client:
-        for dest in DESTINATIONS:
-            print(f"👯 Recherche de groupe vers {dest} en cours...")
-            tasks = [
-                fetch_dep_with_sem(client, dest, dep)
-                for dep in search.departures
-                if dep.strip()
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+    async def process_destination(client, dest):
+        tasks = [fetch_dep_with_sem(client, dest, dep) for dep in valid_departures]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            dest_flights_by_dep = []
-            for res in results:
-                if isinstance(res, list) and res:
-                    cheapest = min(res, key=lambda x: x["prix"])
-                    dest_flights_by_dep.append(cheapest)
+        dest_flights_by_dep = []
+        for res in results:
+            if isinstance(res, list) and res:
+                cheapest = min(res, key=lambda x: x["prix"])
+                dest_flights_by_dep.append(cheapest)
 
-            if len(dest_flights_by_dep) == len(
-                [d for d in search.departures if d.strip()]
-            ):
-                total_price = sum(f["prix"] for f in dest_flights_by_dep)
-                if total_price <= search.max_price:
-                    for flight in dest_flights_by_dep:
-                        flight["stats"] = stats_map.get(
-                            (flight["depart"], flight["arrivee"])
-                        )
-
-                    all_combinations.append(
-                        {
-                            "destination": dest,
-                            "total_price": total_price,
-                            "flights": dest_flights_by_dep,
-                        }
+        if len(dest_flights_by_dep) == len(valid_departures):
+            total_price = sum(f["prix"] for f in dest_flights_by_dep)
+            if total_price <= search.max_price:
+                for flight in dest_flights_by_dep:
+                    flight["stats"] = stats_map.get(
+                        (flight["depart"], flight["arrivee"])
                     )
+
+                return {
+                    "destination": dest,
+                    "total_price": total_price,
+                    "flights": dest_flights_by_dep,
+                }
+        return None
+
+    async with httpx.AsyncClient() as client:
+        print(" Recherche de groupe vers TOUTES les destinations en cours...")
+
+        dest_tasks = [process_destination(client, dest) for dest in DESTINATIONS]
+
+        dest_results = await asyncio.gather(*dest_tasks)
+
+        for res in dest_results:
+            if res is not None:
+                all_combinations.append(res)
 
     all_combinations = sorted(all_combinations, key=lambda x: x["total_price"])
     return {"results": all_combinations}
@@ -675,7 +679,7 @@ def delete_like(user_id: int, tracked_flight_id: int):
         conn.commit()
         return {"message": "Vol retiré des favoris"}
     except Exception as e:
-        print(f" Erreur lors du unlike : {e}")
+        print(f"❌ Erreur lors du unlike : {e}")
         if conn:
             conn.rollback()
         raise HTTPException(
