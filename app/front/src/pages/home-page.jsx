@@ -29,7 +29,6 @@ export default function HomePage() {
   const [date, setDate] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [passengers, setPassengers] = useState(1);
-  const [isDirect, setIsDirect] = useState(false);
 
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,7 +87,6 @@ export default function HomePage() {
         date,
         max_price: Number(maxPrice),
         passengers: Number(passengers),
-        is_direct: isDirect
       };
     } else {
       url = 'http://127.0.0.1:8000/search-group-flights';
@@ -97,7 +95,6 @@ export default function HomePage() {
         date,
         max_price: Number(maxPrice),
         passengers: Number(passengers),
-        is_direct: isDirect
       };
     }
 
