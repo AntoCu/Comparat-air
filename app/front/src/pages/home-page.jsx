@@ -408,13 +408,6 @@ export default function HomePage() {
                 </div>
               </form>
             </div>
-
-            <div className={`mt-4 z-20 relative transition-opacity duration-500 ${animationState === 'taking_off' ? 'opacity-0' : 'opacity-100'}`}>
-              <label className="flex items-center gap-3 cursor-pointer text-[#262262] font-bold text-sm bg-white shadow-sm px-6 py-3 rounded-full border border-slate-200 hover:bg-slate-50 transition-colors">
-                <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} className="w-4 h-4 accent-[#262262] rounded" />
-                Ligne directe uniquement
-              </label>
-            </div>
           </div>
         )}
 

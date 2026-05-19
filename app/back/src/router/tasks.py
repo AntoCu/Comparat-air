@@ -93,5 +93,5 @@ async def fetch_airport(
             return dest_flights
         return []
     except Exception as e:
-        print(f"❌ Erreur critique pour {dest}: {type(e).__name__} - {str(e)}")
+        print(f" Erreur critique pour {dest}: {type(e).__name__} - {str(e)}")
         return []
