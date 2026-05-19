@@ -23,7 +23,8 @@ def release_db_connection(conn):
     if conn:
         db_pool.putconn(conn)
 
-#1. Nombre d'utilisateurs
+
+# 1. Nombre d'utilisateurs
 def get_total_users():
     query = 'SELECT COUNT(*) AS total_users FROM "Users";'
 
@@ -36,7 +37,8 @@ def get_total_users():
     finally:
         release_db_connection(conn)
 
-# 2. Volume Moyen 
+
+# 2. Volume Moyen
 def get_mean_passengers_per_flight():
     query = 'SELECT ROUND(AVG(passengers_nbr), 1) AS mean_passengers FROM "Tracked_Flights";'
     conn = get_db_connection()
@@ -45,18 +47,23 @@ def get_mean_passengers_per_flight():
             cursor.execute(query)
             result = cursor.fetchone()
             # On vérifie si result n'est pas None et on retourne la clé exacte
-            return float(result["mean_passengers"]) if result and result["mean_passengers"] else 0
+            return (
+                float(result["mean_passengers"])
+                if result and result["mean_passengers"]
+                else 0
+            )
     finally:
         release_db_connection(conn)
 
+
 # 3. Top 5 Aéroports de Départ
 def get_top_departure_airports():
-    query = '''
+    query = """
         SELECT "from" AS airport, COUNT(*) AS count 
         FROM "Tracked_Flights" 
         GROUP BY "from" 
         ORDER BY count DESC LIMIT 5;
-    '''
+    """
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -65,14 +72,15 @@ def get_top_departure_airports():
     finally:
         release_db_connection(conn)
 
+
 # 4. Top 5 Aéroports d'Arrivée
 def get_top_arrival_airports():
-    query = '''
+    query = """
         SELECT dest AS airport, COUNT(*) AS count 
         FROM "Tracked_Flights" 
         GROUP BY dest 
         ORDER BY count DESC LIMIT 5;
-    '''
+    """
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -81,31 +89,45 @@ def get_top_arrival_airports():
     finally:
         release_db_connection(conn)
 
+
 # 5. Jours les plus likés
 def get_popular_departure_days():
-    query = '''
+    query = """
+        WITH FormattedDates AS (
+            SELECT 
+                l.id AS like_id,
+                -- On vérifie où se trouve le tiret pour deviner le format
+                CASE 
+                    WHEN SUBSTRING(tf.day, 5, 1) = '-' THEN TO_DATE(SUBSTRING(tf.day, 1, 10), 'YYYY-MM-DD')
+                    WHEN SUBSTRING(tf.day, 3, 1) = '-' THEN TO_DATE(SUBSTRING(tf.day, 1, 10), 'DD-MM-YYYY')
+                    ELSE NULL 
+                END AS real_date
+            FROM "Likes" l
+            JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id
+        )
         SELECT 
-            TRIM(TO_CHAR(CAST(tf.day AS DATE), 'Day')) AS departure_day,
-            COUNT(l.id) AS likes_count
-        FROM "Likes" l
-        JOIN "Tracked_Flights" tf ON l.tracked_flight_id = tf.id
+            TRIM(TO_CHAR(real_date, 'Day')) AS date,
+            COUNT(like_id) AS count
+        FROM FormattedDates
+        WHERE real_date IS NOT NULL
         GROUP BY 
-            TRIM(TO_CHAR(CAST(tf.day AS DATE), 'Day')), 
-            EXTRACT(ISODOW FROM CAST(tf.day AS DATE))
-        ORDER BY EXTRACT(ISODOW FROM CAST(tf.day AS DATE));
-    '''
+            TRIM(TO_CHAR(real_date, 'Day')), 
+            EXTRACT(ISODOW FROM real_date)
+        ORDER BY EXTRACT(ISODOW FROM real_date);
+    """
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(query)
-            return cursor.fetchall() 
+            return cursor.fetchall()
             # Renverra par ex: [{"departure_day": "Friday", "likes_count": 45}, ...]
     finally:
         release_db_connection(conn)
 
+
 # 6. Indice Éco-responsable
 def get_eco_index_distribution():
-    query = '''
+    query = """
         SELECT 
             CASE 
                 WHEN eco_percent >= 80 THEN 'Vert'
@@ -115,7 +137,7 @@ def get_eco_index_distribution():
             COUNT(*) AS count
         FROM "Tracked_Flights"
         GROUP BY category;
-    '''
+    """
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -124,9 +146,10 @@ def get_eco_index_distribution():
     finally:
         release_db_connection(conn)
 
+
 # 7. Corrélation Likes vs Indicateur de Prix
 def get_likes_price_correlation():
-    query = '''
+    query = """
         WITH Statut_Prix_Vol AS (
             SELECT 
                 tf.id AS flight_id,
@@ -142,7 +165,7 @@ def get_likes_price_correlation():
         FROM "Likes" l
         JOIN Statut_Prix_Vol sp ON l.tracked_flight_id = sp.flight_id
         GROUP BY sp.price_status;
-    '''
+    """
     conn = get_db_connection()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -150,4 +173,3 @@ def get_likes_price_correlation():
             return cursor.fetchall()
     finally:
         release_db_connection(conn)
-

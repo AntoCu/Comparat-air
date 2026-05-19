@@ -4,20 +4,8 @@ import {
   XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend
 } from 'recharts';
 
-// --- DONNÉES FACTICES POUR LES GRAPHIQUES (En attendant tes prochaines requêtes SQL) ---
-const topDestinationsData = [
-  { name: 'Paris', unique_searches: 250 },
-  { name: 'Londres', unique_searches: 174 },
-  { name: 'Tokyo', unique_searches: 123 },
-  { name: 'New York', unique_searches: 130 },
-  { name: 'Rome', unique_searches: 101 },
-];
-
-const devicesData = [
-  { name: 'Mobile', value: 65, fill: '#3b82f6' },
-  { name: 'Desktop', value: 30, fill: '#10b981' },
-  { name: 'Tablette', value: 5, fill: '#f59e0b' },
-];
+// --- PALETTE DE COULEURS POUR LES GRAPHIQUES ---
+const ECO_COLORS = ['#ECA920' ,'#E42824','#2BBF57'];
 
 // --- COMPOSANTS DE BASE ---
 const KpiCard = ({ kpi }) => (
@@ -44,6 +32,12 @@ const ChartCard = ({ title, children, className }) => (
 export default function DashboardPage() {  
   const [logs, setLogs] = useState([]);
   const [totalUsers, setTotalUsers] = useState("...");
+  const [meanPassengers, setMeanPassengers] = useState("...");
+  const [topDepartures, setTopDepartures] = useState([]);
+  const [topArrivals, setTopArrivals] = useState([]);
+  const [departureDays, setDepartureDays] = useState([]);
+  const [ecoDistribution, setEcoDistribution] = useState([]);
+  const [likesPriceCorrelation, setLikesPriceCorrelation] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
 
   const fetchLogs = async () => {
@@ -83,6 +77,13 @@ export default function DashboardPage() {
       if (response.ok) {
         const data = await response.json();
         setTotalUsers(data.kpis.total_utilisateurs);
+        setMeanPassengers(data.kpis.mean_passengers);
+        setTopDepartures(data.top_departures);
+        setTopArrivals(data.top_arrivals);
+        setDepartureDays(data.departures_days);
+        setEcoDistribution(data.eco_distribution);
+        setLikesPriceCorrelation(data.likes_price_correlation);
+        console.log("RETOUR COMPLET DU BACKEND :", data);
       }
     } catch (error) {
       console.error("Impossible de récupérer les stats", error);
@@ -103,7 +104,8 @@ export default function DashboardPage() {
   }, []);
 
   const kpis = [
-    { name: 'Utilisateurs Inscrits (Total)', value: totalUsers, change: 'BDD Neon', changeType: 'positive' }
+    { name: 'Utilisateurs enregistrés', value: totalUsers, change: 'BDD Neon', changeType: 'positive' },
+    { name: 'Moyenne passagers par recherche', value: meanPassengers, change: 'BDD Neon', changeType: 'positive' }
   ];
 
   return (
@@ -169,36 +171,115 @@ export default function DashboardPage() {
             </table>
           </div>
         </ChartCard>
+        <div className="flex flex-col gap-6">
+          <ChartCard title="Top Aéroports de départ">
+            <div className="h-[300px] w-full pt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topDepartures} margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="airport" axisLine={false} tickLine={false} />
+                  <YAxis axisLine={false} tickLine={false} width={40} />
+                  <Tooltip 
+                    cursor={{ fill: '#f3f4f6' }} 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                  />
+                  <Bar dataKey="count" fill="#9257ff" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
 
-        {/* Graphique de répartition (Prend 1/3 de l'espace) */}
-        <ChartCard title="Répartition des Appareils">
+          <ChartCard title="Top Aéroports d'arrivée">
+            <div className="h-[300px] w-full pt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topArrivals} margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="airport" axisLine={false} tickLine={false} />
+                  <YAxis axisLine={false} tickLine={false} width={40} />
+                  <Tooltip 
+                    cursor={{ fill: '#f3f4f6' }} 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                  />
+                  <Bar dataKey="count" fill="#b9ff49" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </div>
+
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <ChartCard title="Jour de la semaine le plus liké">
+          <div className="h-[300px] w-full pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={departureDays} margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+                <XAxis dataKey="date" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} width={40} />
+                <Tooltip 
+                  cursor={{ fill: '#f3f4f6' }} 
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                />
+                <Bar dataKey="count" fill="#499eff" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+
+        <ChartCard title="Indice éco responsable">
           <div className="h-[300px] w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={devicesData} innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value" >
-                  {devicesData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                <Pie 
+                  data={ecoDistribution} 
+                  cx="50%"           
+                  cy="50%"           
+                  innerRadius={60}   
+                  outerRadius={80}   
+                  paddingAngle={5}   
+                  dataKey="count"
+                  nameKey="category"
+                >
+                  {ecoDistribution.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={ECO_COLORS[index % ECO_COLORS.length]} 
+                    />
                   ))}
                 </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '13px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </ChartCard>
 
-      </div>
-
-      {/* --- Section Graphiques de Recherche (Fausses données pour le moment) --- */}
-      <div className="grid grid-cols-1 gap-6">
-        <ChartCard title="Top 5 Destinations Trackées (Simulé)">
-          <div className="h-72 w-full">
+        <ChartCard title="Correlation likes et indice de prix">
+          <div className="h-[300px] w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topDestinationsData} layout="vertical" margin={{ top: 0, right: 30, left: 40, bottom: 0 }}>
-                <XAxis type="number" axisLine={false} tickLine={false} />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={120} />
-                <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="unique_searches" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-              </BarChart>
+              <PieChart>
+                <Pie 
+                  data={likesPriceCorrelation} 
+                  cx="50%"           
+                  cy="50%"           
+                  innerRadius={60}   
+                  outerRadius={80}   
+                  paddingAngle={5}   
+                  dataKey="count"
+                  nameKey="status"
+                >
+                  {likesPriceCorrelation.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={ECO_COLORS[index % ECO_COLORS.length]} 
+                    />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '13px' }} />
+              </PieChart>
             </ResponsiveContainer>
           </div>
         </ChartCard>
