@@ -1,11 +1,34 @@
 import { useState, useEffect } from 'react';
 
+const AIRPORT_CITIES = {
+  "LHR": "Londres",
+  "JFK": "New York",
+  "LAX": "Los Angeles",
+  "DXB": "Dubaï",
+  "NRT": "Tokyo",
+  "CDG": "Paris",
+  "BCN": "Barcelone",
+  "FCO": "Rome",
+  "MAD": "Madrid",
+  "SIN": "Singapour",
+  "YUL": "Montréal",
+  "MRS": "Marseille",
+};
+
+const getCityName = (code) => {
+  const cleanCode = code?.split(' ')[0];
+  return AIRPORT_CITIES[cleanCode] || cleanCode;
+};
+
 export default function HomePage() {
+  const [searchMode, setSearchMode] = useState('solo');
+  const [lastSearchMode, setLastSearchMode] = useState('solo');
+  const [groupDepartures, setGroupDepartures] = useState(['', '']);
+
   const [soloDeparture, setSoloDeparture] = useState('');
   const [date, setDate] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [passengers, setPassengers] = useState(1);
-  const [isDirect, setIsDirect] = useState(false);
 
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,25 +63,43 @@ export default function HomePage() {
     fetchUserLikes();
   }, []);
 
+  const handleGroupDepChange = (index, value) => {
+    const newDeps = [...groupDepartures];
+    newDeps[index] = value.toUpperCase();
+    setGroupDepartures(newDeps);
+  };
+
   const handleSearch = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setResults([]);
     setAnimationState('taking_off');
 
-    const payload = {
-      departure: soloDeparture.toUpperCase(),
-      date,
-      max_price: Number(maxPrice),
-      passengers: Number(passengers),
-      is_direct: isDirect
-    };
-
     await new Promise(resolve => setTimeout(resolve, 800));
     setAnimationState('searching');
 
+    let url = 'http://127.0.0.1:8000/search-flights';
+    let payload = {};
+
+    if (searchMode === 'solo') {
+      payload = {
+        departure: soloDeparture.toUpperCase(),
+        date,
+        max_price: Number(maxPrice),
+        passengers: Number(passengers),
+      };
+    } else {
+      url = 'http://127.0.0.1:8000/search-group-flights';
+      payload = {
+        departures: groupDepartures.filter(d => d.trim() !== ''),
+        date,
+        max_price: Number(maxPrice),
+        passengers: Number(passengers),
+      };
+    }
+
     try {
-      const response = await fetch(`http://127.0.0.1:8000/search-flights`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -66,6 +107,7 @@ export default function HomePage() {
       const data = await response.json();
 
       setResults(data.results || []);
+      setLastSearchMode(searchMode);
       setAnimationState('landed');
     } catch (error) {
       console.error("Erreur de recherche", error);
@@ -124,10 +166,164 @@ export default function HomePage() {
   };
 
   const extractTime = (dateStr) => {
-    if (!dateStr) return "";
-    const match = dateStr.match(/\d{1,2}:\d{2}(?:\s?[APM]{2})?/i);
-    return match ? match[0] : dateStr;
+    if (!dateStr) return "N/A";
+
+    const match = dateStr.match(/(\d{1,2}):(\d{2})\s*([AP]M)?/i);
+    if (!match) return dateStr;
+
+    let [_, hours, minutes, ampm] = match;
+    hours = parseInt(hours, 10);
+
+    if (ampm) {
+      ampm = ampm.toUpperCase();
+      if (ampm === 'PM' && hours < 12) {
+        hours += 12;
+      } else if (ampm === 'AM' && hours === 12) {
+        hours = 0;
+      }
+    }
+
+    const formattedHours = hours.toString().padStart(2, '0');
+
+    return `${formattedHours}:${minutes}`;
   };
+
+  const renderDynamicGauge = (prix, stats) => {
+    if (!stats || !stats.seuil_alerte_q3_mensuel) {
+      return (
+        <div className="flex flex-col items-center w-full max-w-[120px] mt-1">
+          <div className="relative w-full h-3 bg-slate-200 rounded-full overflow-hidden flex">
+            <div className="w-1/3 bg-[#4ade80] opacity-40"></div>
+            <div className="w-1/3 bg-[#fbbf24] opacity-40"></div>
+            <div className="w-1/3 bg-[#f87171] opacity-40"></div>
+          </div>
+          <span className="text-[8px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Données en cours</span>
+        </div>
+      );
+    }
+
+    const min = stats.prix_minimum_mensuel;
+    const q1 = stats.seuil_bon_plan_q1_mensuel;
+    const q3 = stats.seuil_alerte_q3_mensuel;
+    const max = Math.max(stats.prix_maximum_mensuel, prix);
+
+    let cursorPosition = 50;
+
+    if (prix <= min) {
+      cursorPosition = 0;
+    } else if (prix > min && prix <= q1) {
+      const range = q1 - min || 1;
+      cursorPosition = ((prix - min) / range) * 33.33;
+    } else if (prix > q1 && prix <= q3) {
+      const range = q3 - q1 || 1;
+      cursorPosition = 33.33 + (((prix - q1) / range) * 33.33);
+    } else {
+      const range = max - q3 || 1;
+      cursorPosition = 66.66 + (((prix - q3) / range) * 33.33);
+    }
+
+    cursorPosition = Math.max(0, Math.min(100, cursorPosition));
+
+    return (
+      <div className="flex flex-col items-center w-full max-w-[140px] mt-2 relative">
+        <div className="relative w-full h-3 bg-slate-100 rounded-full shadow-inner flex overflow-hidden">
+          <div className="bg-[#4ade80] w-1/3 h-full"></div>
+          <div className="bg-[#fbbf24] w-1/3 h-full"></div>
+          <div className="bg-[#f87171] w-1/3 h-full"></div>
+        </div>
+        <div
+          className="absolute top-[-4px] w-5 h-5 bg-[#262262] border-[3px] border-white rounded-full shadow-md z-10 transition-all duration-700 flex items-center justify-center pointer-events-none"
+          style={{ left: `calc(${cursorPosition}% - 10px)` }}
+        ></div>
+      </div>
+    );
+  };
+
+  const renderFlightCard = (flight, destination, flightSignature, showDepartBadge = false) => (
+    <div key={flight.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col xl:flex-row xl:justify-between items-center hover:bg-slate-50 transition-colors gap-2.5 xl:gap-4 w-full relative">
+
+      {showDepartBadge && (
+        <span className="absolute -top-3 left-4 bg-[#262262] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+          Vol depuis {flight.depart}
+        </span>
+      )}
+
+      <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[140px] w-full xl:w-auto pb-2.5 xl:pb-0 border-b border-dashed border-slate-200 xl:border-none">
+        <div className="flex items-center justify-center xl:justify-start gap-3 w-full">
+          <div className="w-10 h-10 xl:hidden flex-shrink-0 flex items-center justify-center">
+            <img src={flight.airline_logo || '/plane.png'} alt="Airline" className="max-w-full max-h-full object-contain" />
+          </div>
+          <div>
+            <h4 className="text-2xl font-black text-[#262262] leading-tight">{getCityName(destination)}</h4>
+            <span className="text-[10px] font-bold text-slate-500 uppercase mt-1 tracking-wider">
+              {flight.depart} - {destination.substring(0, 3)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden xl:flex w-16 h-10 flex-shrink-0 items-center justify-center">
+        <img src={flight.airline_logo || '/plane.png'} alt="Airline" className="max-w-full max-h-full object-contain" />
+      </div>
+
+      <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+      <div className="flex flex-row justify-center items-center w-full xl:w-auto px-4 xl:px-0 gap-6 sm:gap-12 xl:gap-0 xl:contents">
+
+        <div className="flex flex-col items-center justify-center w-[140px] xl:w-auto xl:min-w-[160px]">
+          <span className="text-xl md:text-2xl font-black text-[#262262] text-center">
+            {extractTime(flight.horaire_depart)}
+          </span>
+          <div className="w-1 h-3 bg-slate-200 rounded-full my-1 self-center"></div>
+          <span className="text-xl md:text-2xl font-black text-[#262262] text-center">
+            {extractTime(flight.horaire_arrivee)}
+          </span>
+        </div>
+
+        <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+        <div className="flex items-center justify-center gap-2 w-[80px] xl:w-auto xl:min-w-[90px]">
+          <div className="text-[10px] font-black text-slate-800 tracking-widest [writing-mode:vertical-rl] rotate-180">
+            CO2
+          </div>
+          <div className="flex flex-col items-center justify-center">
+            <img src={getEcoImage(flight.emissions_diff)} alt="Eco" className="w-8 h-8 object-contain mb-1" />
+            <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
+              {flight.emissions_diff != null ? `${flight.emissions_diff} %` : "N/A"}
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+      <div className="flex flex-row justify-center items-center w-full xl:w-auto px-4 xl:px-0 pt-2 xl:pt-0 gap-6 sm:gap-12 xl:gap-0 xl:contents border-t border-dashed border-slate-200 xl:border-none">
+
+        <div className="flex flex-col items-center justify-center w-[140px] xl:w-auto xl:min-w-[140px]">
+          <span className="text-3xl font-black text-[#262262]">{flight.prix}€</span>
+          {renderDynamicGauge(flight.prix, flight.stats)}
+        </div>
+
+        <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
+
+        <div className="flex justify-center items-center w-[80px] xl:w-auto xl:min-w-[40px]">
+          <button
+            onClick={() => handleLike(flight)}
+            className="hover:scale-110 transition-transform flex items-center justify-center"
+            disabled={likedFlights.has(flightSignature)}
+          >
+            <img
+              src={likedFlights.has(flightSignature) ? "/liked.png" : "/notlike.png"}
+              alt="Like"
+              className="w-8 h-8 md:w-10 md:h-10 object-contain"
+            />
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen w-full font-sans flex flex-col overflow-x-hidden relative bg-[#f9f9fa]">
@@ -148,42 +344,66 @@ export default function HomePage() {
 
             <div className={`transition-all duration-700 text-center ${animationState === 'taking_off' ? 'opacity-0 scale-95' : 'opacity-100'}`}>
               <h1 className="text-4xl md:text-5xl lg:text-6xl mt-28 font-black text-[#262262] tracking-tight leading-tight">
-                Avec Comparat'air...<br />
+                Avec Comparat'air,<br />
                 <span className="text-[#262262] opacity-80">seuls les prix restent à terre</span>
               </h1>
             </div>
 
-            <div className={`relative w-full max-w-6xl mx-auto transition-all duration-[800ms] ease-in-out ${animationState === 'taking_off' ? 'translate-x-[150vw] -translate-y-48 scale-75 opacity-0' : 'translate-x-0 opacity-100'}`}>
-              <img src="/plane.png" alt="Comparat'air Plane" className="w-full h-auto object-contain drop-shadow-xl pointer-events-none" />
+            <div className={`relative flex flex-col md:block items-center w-full max-w-6xl mx-auto transition-all duration-[800ms] ease-in-out ${animationState === 'taking_off' ? 'translate-x-[150vw] -translate-y-48 scale-75 opacity-0' : 'translate-x-0 opacity-100'}`}>
+              
+              <img src="/plane.png" alt="Comparat'air Plane" className="w-[85%] md:w-full h-auto object-contain drop-shadow-xl pointer-events-none mb-6 md:mb-0" />
 
-              <form onSubmit={handleSearch} className="absolute top-[55%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex justify-center items-center gap-2 md:gap-3 w-full px-12 md:px-32">
-                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md flex-1 max-w-[150px]">
-                  <span className="text-[#9ca3af] font-medium text-[10px] md:text-sm italic mr-1 md:mr-2">From...</span>
-                  <input type="text" value={soloDeparture} onChange={(e) => setSoloDeparture(e.target.value.toUpperCase())} className="w-full bg-transparent outline-none text-[#262262] font-black uppercase text-center text-xs md:text-base" maxLength={3} placeholder="CDG" required />
+              <form onSubmit={handleSearch} className="relative md:absolute md:top-[50%] md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 flex flex-col items-center w-full px-4 sm:px-12 md:px-32 z-10">
+
+                <div className="flex bg-white/30 backdrop-blur-md p-1 rounded-full shadow-sm mb-4">
+                  <button type="button" onClick={() => setSearchMode('solo')} className={`px-5 py-1.5 rounded-full text-sm font-bold transition-all ${searchMode === 'solo' ? 'bg-white text-[#262262] shadow-sm' : 'text-white hover:bg-white/20'}`}>Solo</button>
+                  <button type="button" onClick={() => setSearchMode('group')} className={`px-5 py-1.5 rounded-full text-sm font-bold transition-all ${searchMode === 'group' ? 'bg-white text-[#262262] shadow-sm' : 'text-white hover:bg-white/20'}`}>Groupe</button>
                 </div>
-                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md flex-1 max-w-[150px]">
-                  <span className="text-[#9ca3af] font-medium text-[10px] md:text-sm italic mr-1 md:mr-2">Prix max...</span>
-                  <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} className="w-full bg-transparent outline-none text-[#262262] font-black text-center text-xs md:text-base" min="10" placeholder="500" required />
+
+                <div className="flex flex-col md:flex-row justify-center items-center gap-3 w-full max-w-sm md:max-w-none">
+                  
+                  <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-3 md:px-4 py-3 shadow-md w-full md:w-auto md:flex-1 md:min-w-[150px] overflow-hidden">
+                    <span className="text-[#9ca3af] font-medium text-[10px] md:text-sm italic mr-1 md:mr-2">From...</span>
+
+                    {searchMode === 'solo' ? (
+                      <input type="text" value={soloDeparture} onChange={(e) => setSoloDeparture(e.target.value.toUpperCase())} className="w-full bg-transparent outline-none text-[#262262] font-black uppercase text-center text-sm md:text-base" maxLength={3} placeholder="CDG" required />
+                    ) : (
+                      <div className="flex gap-1 overflow-x-auto no-scrollbar items-center w-full justify-center">
+                        {groupDepartures.map((dep, idx) => (
+                          <input key={idx} type="text" value={dep} onChange={(e) => handleGroupDepChange(idx, e.target.value)} className="w-10 md:w-14 bg-slate-100 rounded outline-none text-[#262262] font-black uppercase text-center text-sm md:text-base py-0.5" maxLength={3} placeholder="AER" required />
+                        ))}
+                        {groupDepartures.length < 4 && (
+                          <button type="button" onClick={() => setGroupDepartures([...groupDepartures, ''])} className="bg-slate-200 hover:bg-slate-300 text-slate-600 rounded px-2 font-black transition-colors h-full pb-0.5">+</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-row gap-3 w-full md:w-auto md:contents">
+                    <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-3 md:px-4 py-3 shadow-md flex-1 md:min-w-[90px] md:max-w-[150px]">
+                      <span className="text-[#9ca3af] font-medium text-[10px] md:text-sm italic mr-1 md:mr-2">Prix max...</span>
+                      <input type="number" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} className="w-full bg-transparent outline-none text-[#262262] font-black text-center text-sm md:text-base" min="10" placeholder="500" required />
+                    </div>
+                    
+                    <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-3 md:px-4 py-3 shadow-md w-auto flex-none">
+                      <input type="number" value={passengers} onChange={(e) => setPassengers(e.target.value)} className="w-6 md:w-8 bg-transparent outline-none text-[#262262] font-black text-center text-sm md:text-base" min="1" max="9" required />
+                      <img src="/nbr.png" alt="Passagers" className="h-3 w-3 md:h-4 md:w-4 object-contain ml-1" />
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-row gap-3 w-full md:w-auto md:contents">
+                    <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-3 md:px-4 py-3 shadow-md flex-1 md:min-w-[130px] md:max-w-[180px]">
+                      <img src="/calendrier.png" alt="Calendrier" className="h-3 w-3 md:h-4 md:w-4 object-contain ml-1" />
+                      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-transparent outline-none text-[#262262] font-bold text-[10px] md:text-sm" required />
+                    </div>
+                    
+                    <button type="submit" disabled={isLoading} className="bg-[#6b66c7] hover:bg-[#837ed9] text-white p-3 md:p-4 rounded-xl md:rounded-2xl shadow-md transition-colors flex items-center justify-center flex-none">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    </button>
+                  </div>
+
                 </div>
-                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md w-auto">
-                  <input type="number" value={passengers} onChange={(e) => setPassengers(e.target.value)} className="w-6 md:w-8 bg-transparent outline-none text-[#262262] font-black text-center text-xs md:text-base" min="1" max="9" required />
-                  <img src="/nbr.png" alt="Passagers" className="h-3 w-3 md:h-4 md:w-4 object-contain ml-1" />
-                </div>
-                <div className="flex items-center bg-white rounded-xl md:rounded-2xl px-2 md:px-4 py-2 md:py-3 shadow-md flex-1 max-w-[180px]">
-                  <img src="/calendrier.png" alt="Calendrier" className="h-3 w-3 md:h-4 md:w-4 object-contain ml-1" />
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-transparent outline-none text-[#262262] font-bold text-[10px] md:text-sm" required />
-                </div>
-                <button type="submit" disabled={isLoading} className="bg-[#6b66c7] hover:bg-[#837ed9] text-white p-2.5 md:p-4 rounded-xl md:rounded-2xl shadow-md transition-colors flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                </button>
               </form>
-            </div>
-
-            <div className={`mt-4 z-20 relative transition-opacity duration-500 ${animationState === 'taking_off' ? 'opacity-0' : 'opacity-100'}`}>
-              <label className="flex items-center gap-3 cursor-pointer text-[#262262] font-bold text-sm bg-white shadow-sm px-6 py-3 rounded-full border border-slate-200 hover:bg-slate-50 transition-colors">
-                <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} className="w-4 h-4 accent-[#262262] rounded" />
-                Ligne directe uniquement
-              </label>
             </div>
           </div>
         )}
@@ -195,10 +415,18 @@ export default function HomePage() {
               <div className="flex items-center gap-4 md:gap-6">
                 <img src="/plane.png" alt="Mini avion" className="w-24 md:w-32 object-contain drop-shadow-md" />
                 <div>
-                  <h2 className="text-xl md:text-2xl font-black text-[#262262]">Vol depuis {soloDeparture}</h2>
+                  <h2 className="text-xl md:text-2xl font-black text-[#262262]">
+                    Vol depuis {lastSearchMode === 'solo' ? soloDeparture : groupDepartures.filter(d => d).join(', ')}
+                  </h2>
                   <div className="flex flex-wrap gap-2 mt-2">
-                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">📅 {date}</span>
-                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">👤 {passengers} Passager(s)</span>
+                    <span className="flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">
+                      <img src="/calendrier.png" alt="Date" className="h-3 w-3 md:h-4 md:w-4 object-contain" />
+                      {date}
+                    </span>
+                    <span className="flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">
+                      <img src="/nbr.png" alt="Passagers" className="h-3 w-3 md:h-4 md:w-4 object-contain" />
+                      {passengers} Passager(s)
+                    </span>
                     <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs md:text-sm font-bold">Max {maxPrice}€</span>
                   </div>
                 </div>
@@ -220,127 +448,103 @@ export default function HomePage() {
 
             {animationState === 'landed' && (
               <div className="w-full animate-[fadeIn_0.5s_ease-out_forwards]">
-                {Object.keys(groupedResults).length === 0 ? (
+                {results.length === 0 ? (
                   <div className="text-center p-12 bg-white/95 backdrop-blur-sm rounded-3xl shadow-sm w-full max-w-4xl mx-auto border border-slate-200">
-                    <h3 className="text-2xl font-black text-[#262262]">❌ Aucun vol trouvé pour ces critères.</h3>
+                    <h3 className="text-2xl font-black text-[#262262]"> Aucun vol trouvé pour ces critères.</h3>
                   </div>
                 ) : (
                   <div className="grid ml-6 grid-cols-1 lg:grid-cols-2 gap-6 items-start w-full pr-6">
-                    {Object.entries(groupedResults).map(([destination, flights]) => (
 
-                      <div key={destination} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden w-full">
+                    {lastSearchMode === 'solo' ? (
+                      Object.entries(groupedResults).map(([destination, flights]) => (
+                        <div key={destination} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden w-full">
 
-                        <div
-                          onClick={() => setExpandedDest(expandedDest === destination ? null : destination)}
-                          className="px-6 py-4 md:px-8 md:py-6 cursor-pointer flex justify-between items-center transition-colors group bg-[#dce0fc] hover:bg-[#cdd2fb]"
-                        >
-                          <div className="flex items-center gap-4 md:gap-10 w-full">
-
-                            <div className="w-14 h-20 md:w-16 md:h-24 flex-shrink-0 rounded-[2rem] bg-transparent flex items-center justify-center border-[3px] border-[#c0c6f9] shadow-sm text-[#262262]">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>                            </div>
-
-                            <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-16">
-                              <div>
-                0                <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{destination.split(' ')[0]}</h3>
-                                <p className="text-[10px] md:text-sm font-bold text-[#262262] uppercase tracking-wider mt-0.5">
-                                  {soloDeparture || 'CDG'} - {destination.substring(0, 3)}
-                                </p>
+                          <div
+                            onClick={() => setExpandedDest(expandedDest === destination ? null : destination)}
+                            className="px-6 py-4 md:px-8 md:py-6 cursor-pointer flex justify-between items-center transition-colors group bg-[#dce0fc] hover:bg-[#cdd2fb]"
+                          >
+                            <div className="flex items-center gap-4 md:gap-10 w-full">
+                              <div className="w-14 h-20 md:w-16 md:h-24 flex-shrink-0 rounded-[2rem] bg-transparent flex items-center justify-center border-[3px] border-[#c0c6f9] shadow-sm text-[#262262]">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
                               </div>
+                              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-16">
+                                <div>
+                                  <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{getCityName(destination)}</h3>
+                                  <p className="text-[10px] md:text-sm font-bold text-[#262262] uppercase tracking-wider mt-0.5">
+                                    {soloDeparture || 'CDG'} - {destination.substring(0, 3)}
+                                  </p>
+                                </div>
+                                <div className="text-xl md:text-3xl font-black text-[#262262]">
+                                  {flights.length} Vol{flights.length > 1 ? 's' : ''} trouvé{flights.length > 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-10 w-10 md:h-12 md:w-12 text-[#262262] transition-transform duration-300 flex-shrink-0 ${expandedDest === destination ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
 
-                              <div className="text-xl md:text-3xl font-black text-[#262262]">
-                                {flights.length} Vol{flights.length > 1 ? 's' : ''} trouvé{flights.length > 1 ? 's' : ''}
+                          <div className={`transition-all duration-500 ease-in-out bg-[#f9f9fa] ${expandedDest === destination ? 'max-h-[5000px] opacity-100 p-4 md:p-6' : 'max-h-0 opacity-0 overflow-hidden p-0'}`}>
+                            <div className="flex justify-end mb-4">
+                              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-white text-[#262262] font-bold py-2 px-4 rounded-lg border border-slate-200 outline-none shadow-sm cursor-pointer">
+                                <option value="price_asc">Le moins cher</option>
+                                <option value="price_desc">Le plus cher</option>
+                                <option value="eco_asc">Éco-responsable</option>
+                              </select>
+                            </div>
+
+                            <div className="flex flex-col gap-3">
+                              {sortFlights(flights).map((flight) => {
+                                const flightSignature = getFlightSignature(flight.depart, flight.arrivee, flight.horaire_depart);
+                                return renderFlightCard(flight, destination, flightSignature, false);
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      results.map((combo, index) => {
+                        const destination = combo.destination;
+                        return (
+                          <div key={index} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden w-full">
+                            <div onClick={() => setExpandedDest(expandedDest === destination ? null : destination)} className="px-6 py-4 md:px-8 md:py-6 cursor-pointer flex justify-between items-center transition-colors group bg-[#dce0fc] hover:bg-[#cdd2fb]">
+                              <div className="flex items-center gap-4 md:gap-10 w-full">
+                                <div className="w-14 h-20 md:w-16 md:h-24 flex-shrink-0 rounded-[2rem] bg-transparent flex items-center justify-center border-[3px] border-[#c0c6f9] shadow-sm text-[#262262]">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </div>
+                                <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-16">
+                                  <div>
+                                    <h3 className="text-2xl md:text-4xl font-black text-[#262262] tracking-tight">{getCityName(destination)}</h3>
+                                    <p className="text-[10px] md:text-sm font-bold text-[#262262] uppercase tracking-wider mt-0.5">
+                                      {combo.flights.map(f => f.depart).join(', ')} - {destination.substring(0, 3)}
+                                    </p>
+                                  </div>
+                                  <div className="text-xl md:text-3xl font-black text-[#f97316]">
+                                    {combo.total_price}€ <span className="text-sm font-black text-[#262262] block">AU TOTAL</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <svg xmlns="http://www.w3.org/2000/svg" className={`h-10 w-10 md:h-12 md:w-12 text-[#262262] transition-transform duration-300 flex-shrink-0 ${expandedDest === destination ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+
+                            <div className={`transition-all duration-500 ease-in-out bg-[#f9f9fa] ${expandedDest === destination ? 'max-h-[5000px] opacity-100 p-4 md:p-6' : 'max-h-0 opacity-0 overflow-hidden p-0'}`}>
+                              <div className="flex flex-col gap-3 mt-4">
+                                {combo.flights.map((flight) => {
+                                  const flightSignature = getFlightSignature(flight.depart, flight.arrivee, flight.horaire_depart);
+                                  return renderFlightCard(flight, destination, flightSignature, true);
+                                })}
                               </div>
                             </div>
                           </div>
-
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-10 w-10 md:h-12 md:w-12 text-[#262262] transition-transform duration-300 flex-shrink-0 ${expandedDest === destination ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-
-                        <div className={`transition-all duration-500 ease-in-out bg-[#f9f9fa] ${expandedDest === destination ? 'max-h-[5000px] opacity-100 p-4 md:p-6' : 'max-h-0 opacity-0 overflow-hidden p-0'}`}>
-                          <div className="flex justify-end mb-4">
-                            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-white text-[#262262] font-bold py-2 px-4 rounded-lg border border-slate-200 outline-none shadow-sm cursor-pointer">
-                              <option value="price_asc">Le moins cher</option>
-                              <option value="price_desc">Le plus cher</option>
-                              <option value="eco_asc">Éco-responsable</option>
-                            </select>
-                          </div>
-
-                          <div className="flex flex-col gap-3">
-                            {sortFlights(flights).map((flight) => {
-                              const flightSignature = getFlightSignature(flight.depart, flight.arrivee, flight.horaire_depart);
-
-                              return (
-                                <div key={flight.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col xl:flex-row justify-between items-center hover:bg-slate-50 transition-colors gap-6 xl:gap-4">
-
-                                  <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
-                                    <img src={flight.airline_logo || '/plane.png'} alt="Airline" className="max-w-full max-h-full object-contain" />
-                                  </div>
-
-                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-
-                                  <div className="flex flex-col items-center xl:items-start text-center xl:text-left min-w-[120px]">
-                                    <h4 className="text-xl font-black text-[#262262] leading-tight">{destination.split(' ')[0]}</h4>
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">
-                                      {flight.depart} - {destination.substring(0, 3)}
-                                    </span>
-                                  </div>
-
-                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-
-                                  <div className="text-xl md:text-2xl font-black text-[#262262] text-center min-w-[160px]">
-                                    {extractTime(flight.horaire_depart)} - <br className="xl:hidden" />
-                                    {extractTime(flight.horaire_arrivee)}
-                                  </div>
-
-                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-
-                                  <div className="flex flex-col items-center justify-center min-w-[70px]">
-                                    <img src={getEcoImage(flight.emissions_diff)} alt="Eco" className="w-8 h-8 object-contain mb-1" />
-                                    <span className="text-[10px] font-bold bg-[#8d9b81] text-white px-1.5 py-0.5 rounded shadow-sm">
-                                      {flight.emissions_diff ? `${flight.emissions_diff} %` : "N/A"}
-                                    </span>
-                                  </div>
-
-                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-
-                                  <div className="flex items-center gap-4 min-w-[140px]">
-                                    <div className="flex flex-col items-center justify-center">
-                                      <span className="text-3xl font-black text-[#262262]">{flight.prix}€</span>
-                                      <div className="relative w-full max-w-[70px] h-1.5 rounded-full mt-1 flex bg-slate-100 overflow-hidden shadow-inner">
-                                        <div className="bg-[#4ade80] h-full w-1/3"></div>
-                                        <div className="bg-[#fbbf24] h-full w-1/3"></div>
-                                        <div className="bg-[#f87171] h-full w-1/3"></div>
-                                        <div className="absolute top-0 h-full w-1.5 bg-[#262262] rounded-full" style={{ left: '30%' }}></div>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="hidden xl:block w-px h-10 bg-slate-200"></div>
-
-                                  <button
-                                    onClick={() => handleLike(flight)}
-                                    className="hover:scale-110 transition-transform flex items-center justify-center min-w-[40px]"
-                                    disabled={likedFlights.has(flightSignature)}
-                                  >
-                                    <img
-                                      src={likedFlights.has(flightSignature) ? "/liked.png" : "/notlike.png"}
-                                      alt="Like"
-                                      className="w-6 h-6 md:w-8 md:h-8 object-contain"
-                                    />
-                                  </button>
-
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-
-                      </div>
-                    ))}
+                        );
+                      })
+                    )}
                   </div>
                 )}
               </div>
