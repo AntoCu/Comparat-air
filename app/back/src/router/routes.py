@@ -22,6 +22,12 @@ from src.internal.database import (
     get_db_connection,
     release_db_connection,
     get_total_users,
+    get_mean_passengers_per_flight,
+    get_top_departure_airports,
+    get_top_arrival_airports,
+    get_popular_departure_days,
+    get_eco_index_distribution,
+    get_likes_price_correlation,
 )
 from src.internal.security import (
     sanitize_input,
@@ -351,9 +357,21 @@ def search_destination(request: SearchRequest, request_obj: Request):
 def get_dashboard_stats(request: Request):
     if get_current_user_role(request) != "admin":
         raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
-
     total_users = get_total_users()
-    return {"kpis": {"total_utilisateurs": total_users}}
+    mean_passengers = get_mean_passengers_per_flight()
+    top_departures = get_top_departure_airports()
+    top_arrivals = get_top_arrival_airports()
+    departure_days = get_popular_departure_days()
+    eco_distribution = get_eco_index_distribution()
+    likes_price_correlation = get_likes_price_correlation()
+    return {
+        "kpis": {"total_utilisateurs": total_users, "mean_passengers": mean_passengers},
+        "top_departures": top_departures,
+        "top_arrivals": top_arrivals,
+        "departures_days": departure_days,
+        "eco_distribution": eco_distribution,
+        "likes_price_correlation": likes_price_correlation,
+    }
 
 
 @router.post("/refresh-likes/{user_id}")
