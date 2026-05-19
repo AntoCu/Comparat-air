@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from '../config';
+
 const AIRPORT_CITIES = {
   "LHR": "Londres",
   "JFK": "New York",
