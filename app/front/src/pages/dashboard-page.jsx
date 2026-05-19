@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const [topArrivals, setTopArrivals] = useState([]);
   const [departureDays, setDepartureDays] = useState([]);
   const [ecoDistribution, setEcoDistribution] = useState([]);
-  const [likesPriceCorrelation, setLikesPriceCorrelation] = useState([]);
+  //const [likesPriceCorrelation, setLikesPriceCorrelation] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
 
   const fetchLogs = async () => {
@@ -81,7 +81,7 @@ export default function DashboardPage() {
         setTopArrivals(data.top_arrivals);
         setDepartureDays(data.departures_days);
         setEcoDistribution(data.eco_distribution);
-        setLikesPriceCorrelation(data.likes_price_correlation);
+        //setLikesPriceCorrelation(data.likes_price_correlation);
         console.log("RETOUR COMPLET DU BACKEND :", data);
       }
     } catch (error) {
