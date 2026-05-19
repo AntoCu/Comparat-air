@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../config';
 import {
   ResponsiveContainer, BarChart, Bar,
   XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend
@@ -42,7 +43,7 @@ export default function DashboardPage() {
   const fetchLogs = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('http://127.0.0.1:8000/admin/logs', {
+      const response = await fetch('${API_URL}/admin/logs', {
         method: 'GET',
         headers: { 
           'Content-Type': 'application/json',
@@ -65,7 +66,7 @@ export default function DashboardPage() {
   const fetchStats = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('http://127.0.0.1:8000/admin/stats', {
+      const response = await fetch('${API_URL}/admin/stats', {
         method: 'GET',
         headers: { 
           'Content-Type': 'application/json',

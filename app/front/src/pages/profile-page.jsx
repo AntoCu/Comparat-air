@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { API_URL } from '../config';
 
 export default function ProfilePage({ setIsLoggedIn }) {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function ProfilePage({ setIsLoggedIn }) {
       if (!userId) return;
 
       try {
-        const response = await fetch(`http://127.0.0.1:8000/likes/${userId}`);
+        const response = await fetch(`${API_URL}/likes/${userId}`);
         if (response.ok) {
           const data = await response.json();
           const count = data.likes ? data.likes.length : 0;
@@ -48,7 +49,7 @@ export default function ProfilePage({ setIsLoggedIn }) {
     }
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/change-password', {
+      const response = await fetch('${API_URL}/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

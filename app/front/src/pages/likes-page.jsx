@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-
+import { API_URL } from '../config';
 const AIRPORT_CITIES = {
   "LHR": "Londres",
   "JFK": "New York",
@@ -31,7 +31,7 @@ export default function LikesPage() {
     if (!userId) return;
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/likes/${userId}`);
+      const response = await fetch(`${API_URL}/likes/${userId}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -49,7 +49,7 @@ export default function LikesPage() {
     if (!userId) return;
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/likes/${userId}/${flightId}`, {
+      const response = await fetch(`${API_URL}/likes/${userId}/${flightId}`, {
         method: 'DELETE'
       });
 
@@ -79,7 +79,7 @@ export default function LikesPage() {
     setIsRefreshing(true);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/refresh-likes/${userId}`, {
+      const response = await fetch(`${API_URL}/refresh-likes/${userId}`, {
         method: 'POST'
       });
       const data = await response.json();

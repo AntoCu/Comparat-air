@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from src.internal.logger import log_failed_login
 from src.internal.config import limiter
 from src.router.routes import router as api_router
+import os
 
 load_dotenv()
 
@@ -34,9 +35,20 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",  # Port par défaut si tu utilises Vite
+    "http://127.0.0.1:5173",
+]
+
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url:
+    origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

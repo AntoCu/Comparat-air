@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_URL } from '../config';
 
 const AIRPORT_CITIES = {
   "LHR": "Londres",
@@ -49,7 +50,7 @@ export default function HomePage() {
       if (!userId) return;
 
       try {
-        const response = await fetch(`http://127.0.0.1:8000/likes/${userId}`);
+        const response = await fetch(`${API_URL}/likes/${userId}`);
         if (response.ok) {
           const data = await response.json();
           const likedIds = new Set(data.likes.map(like => like.flight_id));
@@ -78,7 +79,7 @@ export default function HomePage() {
     await new Promise(resolve => setTimeout(resolve, 800));
     setAnimationState('searching');
 
-    let url = 'http://127.0.0.1:8000/search-flights';
+    let url = '${API_URL}/search-flights';
     let payload = {};
 
     if (searchMode === 'solo') {
@@ -89,7 +90,7 @@ export default function HomePage() {
         passengers: Number(passengers),
       };
     } else {
-      url = 'http://127.0.0.1:8000/search-group-flights';
+      url = '${API_URL}/search-group-flights';
       payload = {
         departures: groupDepartures.filter(d => d.trim() !== ''),
         date,
@@ -131,7 +132,7 @@ export default function HomePage() {
     };
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch('${API_URL}/like', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (response.ok) {
         setLikedFlights(prev => new Set(prev).add(signature));
       }
