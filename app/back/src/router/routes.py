@@ -45,7 +45,7 @@ CRON_SECRET = os.environ["CRON_SECRET"]
 
 MAX_CONCURRENT_API_CALLS = 10
 
-NOM_VUE_STATS = '"vue_stats_globales_trajets"'
+NOM_VUE_STATS = '"vue_indicateurs_prix_saisonniers"'
 
 
 @router.post("/search-flights")
@@ -675,7 +675,7 @@ def delete_like(user_id: int, tracked_flight_id: int):
         conn.commit()
         return {"message": "Vol retiré des favoris"}
     except Exception as e:
-        print(f"❌ Erreur lors du unlike : {e}")
+        print(f" Erreur lors du unlike : {e}")
         if conn:
             conn.rollback()
         raise HTTPException(

@@ -29,7 +29,6 @@ export default function HomePage() {
   const [date, setDate] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [passengers, setPassengers] = useState(1);
-  const [isDirect, setIsDirect] = useState(false);
 
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,7 +87,6 @@ export default function HomePage() {
         date,
         max_price: Number(maxPrice),
         passengers: Number(passengers),
-        is_direct: isDirect
       };
     } else {
       url = 'http://127.0.0.1:8000/search-group-flights';
@@ -97,7 +95,6 @@ export default function HomePage() {
         date,
         max_price: Number(maxPrice),
         passengers: Number(passengers),
-        is_direct: isDirect
       };
     }
 
@@ -407,13 +404,6 @@ export default function HomePage() {
 
                 </div>
               </form>
-            </div>
-
-            <div className={`mt-4 z-20 relative transition-opacity duration-500 ${animationState === 'taking_off' ? 'opacity-0' : 'opacity-100'}`}>
-              <label className="flex items-center gap-3 cursor-pointer text-[#262262] font-bold text-sm bg-white shadow-sm px-6 py-3 rounded-full border border-slate-200 hover:bg-slate-50 transition-colors">
-                <input type="checkbox" checked={isDirect} onChange={(e) => setIsDirect(e.target.checked)} className="w-4 h-4 accent-[#262262] rounded" />
-                Ligne directe uniquement
-              </label>
             </div>
           </div>
         )}
