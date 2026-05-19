@@ -157,9 +157,9 @@ def get_eco_index_distribution():
     query = """
         SELECT 
             CASE 
-                WHEN eco_percent >= 80 THEN 'Vert'
-                WHEN eco_percent >= 50 THEN 'Orange'
-                ELSE 'Rouge'
+                WHEN eco_percent > 75 THEN 'Rouge'
+                WHEN eco_percent > 10 THEN 'Orange'
+                ELSE 'Vert'
             END AS category,
             COUNT(*) AS count
         FROM "Tracked_Flights"
@@ -177,17 +177,44 @@ def get_eco_index_distribution():
 # 7. Corrélation Likes vs Indicateur de Prix
 def get_likes_price_correlation():
     query = """
-        WITH Statut_Prix_Vol AS (
+        WITH Cleaned_Tracked_Flights AS (
+            -- 1. Uniformisation des dates hétérogènes
             SELECT 
-                tf.id AS flight_id,
+                id,
+                flight_id,
+                CASE 
+                    WHEN SUBSTRING(day, 5, 1) = '-' THEN TO_DATE(SUBSTRING(day, 1, 10), 'YYYY-MM-DD')
+                    WHEN SUBSTRING(day, 3, 1) = '-' THEN TO_DATE(SUBSTRING(day, 1, 10), 'DD-MM-YYYY')
+                    ELSE NULL 
+                END AS real_date
+            FROM "Tracked_Flights"
+        ),
+        Latest_Prices AS (
+            -- 2. Récupération du dernier prix enregistré
+            SELECT DISTINCT ON (tracked_flight_id)
+                tracked_flight_id,
+                price AS dernier_prix
+            FROM "Price_History"
+            ORDER BY tracked_flight_id, date DESC
+        ),
+        Statut_Prix_Vol AS (
+            -- 3. Association avec les seuils mensuels
+            SELECT 
+                ctf.id AS flight_id,
                 CASE
-                    WHEN v.prix_moyen_mensuel <= v.seuil_bon_plan_q1_mensuel THEN 'Vert (Bon plan)'
-                    WHEN v.prix_moyen_mensuel >= v.seuil_alerte_q3_mensuel THEN 'Rouge (Trop cher)'
+                    WHEN lp.dernier_prix <= v.seuil_bon_plan_q1_mensuel THEN 'Vert (Bon plan)'
+                    WHEN lp.dernier_prix >= v.seuil_alerte_q3_mensuel THEN 'Rouge (Trop cher)'
                     ELSE 'Orange (Normal)'
                 END AS price_status
-            FROM "Tracked_Flights" tf
-            JOIN vue_indicateurs_prix_saisonniers v ON tf.flight_id = v.flight_id
+            FROM Cleaned_Tracked_Flights ctf
+            JOIN vue_indicateurs_prix_saisonniers v 
+                ON ctf.flight_id = v.flight_id 
+                -- Extraction du mois depuis la date nettoyée
+                AND EXTRACT(MONTH FROM ctf.real_date)::integer = v.mois_recherche
+            LEFT JOIN Latest_Prices lp ON ctf.id = lp.tracked_flight_id
+            WHERE ctf.real_date IS NOT NULL
         )
+        -- 4. Décompte final avec les Likes
         SELECT sp.price_status AS status, COUNT(l.id) AS count
         FROM "Likes" l
         JOIN Statut_Prix_Vol sp ON l.tracked_flight_id = sp.flight_id

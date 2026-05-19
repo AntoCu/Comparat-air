@@ -253,7 +253,7 @@ export default function DashboardPage() {
           </div>
         </ChartCard>
 
-        <ChartCard title="Correlation likes et indice de prix">
+        {/* <ChartCard title="Correlation likes et indice de prix">
           <div className="h-[300px] w-full flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -281,7 +281,7 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
           </div>
-        </ChartCard>
+        </ChartCard> */}
       </div>
 
     </div>
