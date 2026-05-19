@@ -35,20 +35,9 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",  # Port par défaut si tu utilises Vite
-    "http://127.0.0.1:5173",
-]
-
-frontend_url = os.getenv("VITE_API_URL")
-if frontend_url:
-    origins.append(frontend_url)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
