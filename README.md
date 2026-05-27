@@ -2,7 +2,7 @@
 
 Comparat'air est un projet réalisé dans le cadre d'un PFE entre ICC, HPDA et CS.
 Le but de Comparat'air est de permettre aux utilisateurs de pouvoir rechercher un vol, simplement et clairement
-Le site est accessible sur : **https://comparatair.vercel.app/** */ mais il est possible de lancer le projet en local (voir Installation)
+Le site est accessible sur : **https://comparatair.vercel.app/** mais il est possible de lancer le projet en local (voir Installation)
 
 ## Backend FastAPI
 
